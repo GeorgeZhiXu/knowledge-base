@@ -2,7 +2,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.database import init_db
+from sqlalchemy import text
+from app.core.database import init_db, engine
 from app.api.routes import curriculum, characters, import_data
 from app.models.models import RequirementType
 from app.core.database import async_session
@@ -27,9 +28,24 @@ async def seed_requirement_types():
         await db.commit()
 
 
+async def migrate_db():
+    """Add new columns to existing tables if they don't exist."""
+    async with engine.begin() as conn:
+        # SQLite ALTER TABLE to add columns if missing
+        for col, coltype in [
+            ("frequency_rank", "INTEGER"),
+            ("frequency_level", "INTEGER"),
+        ]:
+            try:
+                await conn.execute(text(f"ALTER TABLE characters ADD COLUMN {col} {coltype}"))
+            except Exception:
+                pass  # Column already exists
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await migrate_db()
     await seed_requirement_types()
     yield
 

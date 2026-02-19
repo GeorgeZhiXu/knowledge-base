@@ -72,6 +72,8 @@ class Character(SQLModel, table=True):
     stroke_count: Optional[int] = None
     radical: Optional[str] = Field(default=None, max_length=10)
     structure: Optional[str] = Field(default=None, max_length=20)
+    frequency_rank: Optional[int] = Field(default=None, index=True)
+    frequency_level: Optional[int] = Field(default=None)  # 1=常用, 2=次常用, 3=rare
     notes: Optional[str] = Field(default=None, max_length=500)
 
 

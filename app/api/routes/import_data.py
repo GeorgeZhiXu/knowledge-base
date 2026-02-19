@@ -236,3 +236,41 @@ async def import_lesson_data(data: LessonDataImport, db: AsyncSession = Depends(
     )
     await db.commit()
     return {"status": "ok", **stats}
+
+
+class FrequencyEntry(BaseModel):
+    character: str
+    pinyin: str = ""
+    frequency_rank: int
+    frequency_level: int = 1
+
+class FrequencyImport(BaseModel):
+    characters: list[FrequencyEntry]
+
+@router.post("/import/frequency")
+async def import_frequency_data(data: FrequencyImport, db: AsyncSession = Depends(get_session)):
+    """Import character frequency rankings. Creates new characters or updates existing ones."""
+    created = 0
+    updated = 0
+    for entry in data.characters:
+        result = await db.exec(
+            select(Character).where(Character.character == entry.character)
+        )
+        char = result.one_or_none()
+        if char:
+            char.frequency_rank = entry.frequency_rank
+            char.frequency_level = entry.frequency_level
+            if entry.pinyin and not char.pinyin:
+                char.pinyin = entry.pinyin
+            db.add(char)
+            updated += 1
+        else:
+            db.add(Character(
+                character=entry.character,
+                pinyin=entry.pinyin,
+                frequency_rank=entry.frequency_rank,
+                frequency_level=entry.frequency_level,
+            ))
+            created += 1
+    await db.commit()
+    return {"status": "ok", "created": created, "updated": updated}
