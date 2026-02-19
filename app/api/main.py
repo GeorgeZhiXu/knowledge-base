@@ -39,6 +39,7 @@ app = FastAPI(
     description="Curriculum knowledge base for Chinese characters, phrases, and lesson tracking",
     version="0.1.0",
     lifespan=lifespan,
+    root_path="/knowledgebase",
 )
 
 app.add_middleware(
