@@ -1,12 +1,15 @@
-"""Bulk import route for populating lesson data efficiently."""
+"""Bulk import routes for populating knowledge base data efficiently."""
 
 from uuid import UUID
+from typing import Optional
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.core.database import get_session
 from app.models.models import (
+    Subject, Textbook, Unit, Lesson,
     Character, CharacterLesson, RequirementType,
     Phrase, PhraseCharacter, PhraseLesson,
 )
@@ -14,114 +17,222 @@ from app.models.models import (
 router = APIRouter()
 
 
-@router.post("/import/lesson")
-async def import_lesson_data(data: dict, db: AsyncSession = Depends(get_session)):
-    """Bulk import characters and phrases for a lesson.
+# --- Request schemas ---
 
-    Expected payload:
-    {
-        "lesson_id": "uuid",
-        "characters": [
-            {"character": "天", "pinyin": "tiān", "requirement": "recognize"},
-            {"character": "地", "pinyin": "dì", "requirement": "write"}
-        ],
-        "phrases": [
-            {"phrase": "天地", "pinyin": "tiān dì"},
-            {"phrase": "人民", "pinyin": "rén mín", "meaning": "people"}
-        ]
-    }
-    """
-    lesson_id = UUID(data["lesson_id"])
-    stats = {"characters_created": 0, "character_lessons_created": 0,
-             "phrases_created": 0, "phrase_lessons_created": 0}
+class CharacterImport(BaseModel):
+    character: str
+    pinyin: str = ""
+    stroke_count: Optional[int] = None
+    radical: Optional[str] = None
+    structure: Optional[str] = None
+    requirement: str = "recognize"
 
-    # Cache requirement types
-    rt_result = await db.exec(select(RequirementType))
-    req_map = {rt.code: rt.id for rt in rt_result.all()}
+class PhraseImport(BaseModel):
+    phrase: str
+    pinyin: str = ""
+    meaning: Optional[str] = None
 
-    # Import characters
-    for i, ch_data in enumerate(data.get("characters", [])):
-        char_str = ch_data["character"]
+class LessonImport(BaseModel):
+    lesson_number: int
+    title: str
+    page_start: Optional[int] = None
+    page_end: Optional[int] = None
+    characters: list[CharacterImport] = []
+    phrases: list[PhraseImport] = []
+
+class UnitImport(BaseModel):
+    unit_number: int
+    title: str
+    lessons: list[LessonImport] = []
+
+class TextbookImport(BaseModel):
+    publisher: str = "人教版"
+    grade: int
+    volume: int
+    name: str
+    units: list[UnitImport] = []
+
+class FullImport(BaseModel):
+    """Import an entire textbook with all units, lessons, characters, and phrases."""
+    subject_code: str = "chinese"
+    subject_name: str = "语文"
+    textbook: TextbookImport
+
+class LessonDataImport(BaseModel):
+    """Import characters and phrases for an existing lesson."""
+    lesson_id: UUID
+    characters: list[CharacterImport] = []
+    phrases: list[PhraseImport] = []
+
+
+async def _get_or_create_subject(db: AsyncSession, code: str, name: str) -> Subject:
+    result = await db.exec(select(Subject).where(Subject.code == code))
+    subject = result.one_or_none()
+    if not subject:
+        subject = Subject(code=code, name=name)
+        db.add(subject)
+        await db.flush()
+    return subject
+
+
+async def _get_requirement_map(db: AsyncSession) -> dict[str, UUID]:
+    result = await db.exec(select(RequirementType))
+    return {rt.code: rt.id for rt in result.all()}
+
+
+async def _import_characters_and_phrases(
+    db: AsyncSession,
+    lesson_id: UUID,
+    characters: list[CharacterImport],
+    phrases: list[PhraseImport],
+    req_map: dict[str, UUID],
+) -> dict:
+    stats = {"characters": 0, "character_lessons": 0, "phrases": 0, "phrase_lessons": 0}
+
+    for i, ch in enumerate(characters):
         # Create or get character
-        existing = await db.exec(
-            select(Character).where(Character.character == char_str)
-        )
+        existing = await db.exec(select(Character).where(Character.character == ch.character))
         if not existing.one_or_none():
-            char = Character(
-                character=char_str,
-                pinyin=ch_data.get("pinyin", ""),
-                stroke_count=ch_data.get("stroke_count"),
-                radical=ch_data.get("radical"),
-                structure=ch_data.get("structure"),
-            )
-            db.add(char)
-            stats["characters_created"] += 1
+            db.add(Character(
+                character=ch.character, pinyin=ch.pinyin,
+                stroke_count=ch.stroke_count, radical=ch.radical, structure=ch.structure,
+            ))
+            stats["characters"] += 1
 
         # Link to lesson
-        req_code = ch_data.get("requirement", "recognize")
-        req_id = req_map.get(req_code)
+        req_id = req_map.get(ch.requirement)
         if req_id:
-            # Check if link already exists
             existing_cl = await db.exec(
                 select(CharacterLesson)
-                .where(CharacterLesson.character == char_str)
+                .where(CharacterLesson.character == ch.character)
                 .where(CharacterLesson.lesson_id == lesson_id)
                 .where(CharacterLesson.requirement_id == req_id)
             )
             if not existing_cl.one_or_none():
-                cl = CharacterLesson(
-                    character=char_str,
-                    lesson_id=lesson_id,
-                    requirement_id=req_id,
-                    sort_order=i,
-                )
-                db.add(cl)
-                stats["character_lessons_created"] += 1
+                db.add(CharacterLesson(
+                    character=ch.character, lesson_id=lesson_id,
+                    requirement_id=req_id, sort_order=i,
+                ))
+                stats["character_lessons"] += 1
 
-    # Import phrases
-    for i, ph_data in enumerate(data.get("phrases", [])):
-        phrase_str = ph_data["phrase"]
-        # Create or get phrase
-        existing = await db.exec(
-            select(Phrase).where(Phrase.phrase == phrase_str)
-        )
+    for i, ph in enumerate(phrases):
+        existing = await db.exec(select(Phrase).where(Phrase.phrase == ph.phrase))
         phrase = existing.one_or_none()
         if not phrase:
-            phrase = Phrase(
-                phrase=phrase_str,
-                pinyin=ph_data.get("pinyin", ""),
-                meaning=ph_data.get("meaning"),
-                notes=ph_data.get("notes"),
-            )
+            phrase = Phrase(phrase=ph.phrase, pinyin=ph.pinyin, meaning=ph.meaning)
             db.add(phrase)
             await db.flush()
-            stats["phrases_created"] += 1
+            stats["phrases"] += 1
 
-            # Auto-create phrase_characters
-            for j, ch in enumerate(phrase_str):
-                char_exists = await db.exec(
-                    select(Character).where(Character.character == ch)
-                )
-                if char_exists.one_or_none():
-                    pc = PhraseCharacter(
-                        phrase_id=phrase.id, character=ch, position=j
-                    )
-                    db.add(pc)
+            # Auto-link phrase characters
+            for j, ch_str in enumerate(ph.phrase):
+                ch_exists = await db.exec(select(Character).where(Character.character == ch_str))
+                if ch_exists.one_or_none():
+                    db.add(PhraseCharacter(phrase_id=phrase.id, character=ch_str, position=j))
 
-        # Link phrase to lesson
+        # Link to lesson
         existing_pl = await db.exec(
             select(PhraseLesson)
             .where(PhraseLesson.phrase_id == phrase.id)
             .where(PhraseLesson.lesson_id == lesson_id)
         )
         if not existing_pl.one_or_none():
-            pl = PhraseLesson(
-                phrase_id=phrase.id,
-                lesson_id=lesson_id,
-                sort_order=i,
-            )
-            db.add(pl)
-            stats["phrase_lessons_created"] += 1
+            db.add(PhraseLesson(phrase_id=phrase.id, lesson_id=lesson_id, sort_order=i))
+            stats["phrase_lessons"] += 1
 
+    return stats
+
+
+@router.post("/import/textbook")
+async def import_textbook(data: FullImport, db: AsyncSession = Depends(get_session)):
+    """Import an entire textbook with all units, lessons, characters, and phrases.
+
+    Example:
+    ```json
+    {
+      "subject_code": "chinese",
+      "subject_name": "语文",
+      "textbook": {
+        "publisher": "人教版",
+        "grade": 1,
+        "volume": 1,
+        "name": "一年级上册",
+        "units": [
+          {
+            "unit_number": 1,
+            "title": "第一单元",
+            "lessons": [
+              {
+                "lesson_number": 1,
+                "title": "天地人",
+                "characters": [
+                  {"character": "天", "pinyin": "tiān", "requirement": "recognize"},
+                  {"character": "地", "pinyin": "dì", "requirement": "recognize"},
+                  {"character": "人", "pinyin": "rén", "requirement": "write"}
+                ],
+                "phrases": [
+                  {"phrase": "天地", "pinyin": "tiān dì"},
+                  {"phrase": "人民", "pinyin": "rén mín", "meaning": "people"}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+    ```
+    """
+    req_map = await _get_requirement_map(db)
+    subject = await _get_or_create_subject(db, data.subject_code, data.subject_name)
+
+    tb = data.textbook
+    textbook = Textbook(
+        subject_id=subject.id, publisher=tb.publisher,
+        grade=tb.grade, volume=tb.volume, name=tb.name,
+    )
+    db.add(textbook)
+    await db.flush()
+
+    totals = {"units": 0, "lessons": 0, "characters": 0, "character_lessons": 0,
+              "phrases": 0, "phrase_lessons": 0}
+
+    for unit_data in tb.units:
+        unit = Unit(textbook_id=textbook.id, unit_number=unit_data.unit_number, title=unit_data.title)
+        db.add(unit)
+        await db.flush()
+        totals["units"] += 1
+
+        for lesson_data in unit_data.lessons:
+            lesson = Lesson(
+                unit_id=unit.id, lesson_number=lesson_data.lesson_number,
+                title=lesson_data.title, page_start=lesson_data.page_start,
+                page_end=lesson_data.page_end,
+            )
+            db.add(lesson)
+            await db.flush()
+            totals["lessons"] += 1
+
+            stats = await _import_characters_and_phrases(
+                db, lesson.id, lesson_data.characters, lesson_data.phrases, req_map,
+            )
+            for k, v in stats.items():
+                totals[k] += v
+
+    await db.commit()
+    return {
+        "status": "ok",
+        "textbook_id": str(textbook.id),
+        "subject_id": str(subject.id),
+        **totals,
+    }
+
+
+@router.post("/import/lesson")
+async def import_lesson_data(data: LessonDataImport, db: AsyncSession = Depends(get_session)):
+    """Import characters and phrases for an existing lesson."""
+    req_map = await _get_requirement_map(db)
+    stats = await _import_characters_and_phrases(
+        db, data.lesson_id, data.characters, data.phrases, req_map,
+    )
     await db.commit()
     return {"status": "ok", **stats}
