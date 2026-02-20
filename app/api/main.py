@@ -35,6 +35,8 @@ async def migrate_db():
         for col, coltype in [
             ("frequency_rank", "INTEGER"),
             ("frequency_level", "INTEGER"),
+            ("frequency_count", "INTEGER"),
+            ("cumulative_percent", "REAL"),
         ]:
             try:
                 await conn.execute(text(f"ALTER TABLE characters ADD COLUMN {col} {coltype}"))

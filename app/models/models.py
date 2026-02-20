@@ -74,6 +74,8 @@ class Character(SQLModel, table=True):
     structure: Optional[str] = Field(default=None, max_length=20)
     frequency_rank: Optional[int] = Field(default=None, index=True)
     frequency_level: Optional[int] = Field(default=None)  # 1=常用, 2=次常用, 3=rare
+    frequency_count: Optional[int] = Field(default=None)  # raw corpus count
+    cumulative_percent: Optional[float] = Field(default=None)  # cumulative coverage %
     notes: Optional[str] = Field(default=None, max_length=500)
 
 

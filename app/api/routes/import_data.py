@@ -243,6 +243,8 @@ class FrequencyEntry(BaseModel):
     pinyin: str = ""
     frequency_rank: int
     frequency_level: int = 1
+    frequency_count: Optional[int] = None
+    cumulative_percent: Optional[float] = None
 
 class FrequencyImport(BaseModel):
     characters: list[FrequencyEntry]
@@ -260,6 +262,10 @@ async def import_frequency_data(data: FrequencyImport, db: AsyncSession = Depend
         if char:
             char.frequency_rank = entry.frequency_rank
             char.frequency_level = entry.frequency_level
+            if entry.frequency_count is not None:
+                char.frequency_count = entry.frequency_count
+            if entry.cumulative_percent is not None:
+                char.cumulative_percent = entry.cumulative_percent
             if entry.pinyin and not char.pinyin:
                 char.pinyin = entry.pinyin
             db.add(char)
@@ -270,6 +276,8 @@ async def import_frequency_data(data: FrequencyImport, db: AsyncSession = Depend
                 pinyin=entry.pinyin,
                 frequency_rank=entry.frequency_rank,
                 frequency_level=entry.frequency_level,
+                frequency_count=entry.frequency_count,
+                cumulative_percent=entry.cumulative_percent,
             ))
             created += 1
     await db.commit()
