@@ -112,3 +112,42 @@ async def get_lesson(lesson_id: UUID, db: AsyncSession = Depends(get_session)):
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
     return lesson
+
+
+# --- Deletes (cascade) ---
+
+@router.delete("/subjects/{subject_id}", status_code=204)
+async def delete_subject(subject_id: UUID, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(Subject).where(Subject.id == subject_id))
+    subject = result.one_or_none()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    await db.delete(subject)
+    await db.commit()
+
+@router.delete("/textbooks/{textbook_id}", status_code=204)
+async def delete_textbook(textbook_id: UUID, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(Textbook).where(Textbook.id == textbook_id))
+    textbook = result.one_or_none()
+    if not textbook:
+        raise HTTPException(status_code=404, detail="Textbook not found")
+    await db.delete(textbook)
+    await db.commit()
+
+@router.delete("/units/{unit_id}", status_code=204)
+async def delete_unit(unit_id: UUID, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(Unit).where(Unit.id == unit_id))
+    unit = result.one_or_none()
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    await db.delete(unit)
+    await db.commit()
+
+@router.delete("/lessons/{lesson_id}", status_code=204)
+async def delete_lesson(lesson_id: UUID, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(Lesson).where(Lesson.id == lesson_id))
+    lesson = result.one_or_none()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    await db.delete(lesson)
+    await db.commit()

@@ -257,3 +257,36 @@ async def get_textbook_phrases(
         {**p.model_dump(), "lesson_title": l.title, "unit_title": u.title}
         for p, pl, l, u in result.all()
     ]
+
+
+# --- Deletes ---
+
+@router.delete("/characters/{char}", status_code=204)
+async def delete_character(char: str, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(Character).where(Character.character == char))
+    character = result.one_or_none()
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+    # Remove from character_lessons and phrase_characters
+    for model in [CharacterLesson, PhraseCharacter]:
+        rows = await db.exec(select(model).where(model.character == char))
+        for r in rows.all():
+            await db.delete(r)
+    await db.delete(character)
+    await db.commit()
+
+@router.delete("/phrases/{phrase_id}", status_code=204)
+async def delete_phrase(phrase_id: UUID, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(Phrase).where(Phrase.id == phrase_id))
+    phrase = result.one_or_none()
+    if not phrase:
+        raise HTTPException(status_code=404, detail="Phrase not found")
+    # Remove from phrase_characters and phrase_lessons
+    pcs = await db.exec(select(PhraseCharacter).where(PhraseCharacter.phrase_id == phrase_id))
+    for r in pcs.all():
+        await db.delete(r)
+    pls = await db.exec(select(PhraseLesson).where(PhraseLesson.phrase_id == phrase_id))
+    for r in pls.all():
+        await db.delete(r)
+    await db.delete(phrase)
+    await db.commit()

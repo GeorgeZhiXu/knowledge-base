@@ -62,6 +62,34 @@ async def get_learner(learner_id: UUID, db: AsyncSession = Depends(get_session))
         raise HTTPException(status_code=404, detail="Learner not found")
     return learner
 
+@router.put("/learners/{learner_id}")
+async def update_learner(learner_id: UUID, data: LearnerCreate, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(Learner).where(Learner.id == learner_id))
+    learner = result.one_or_none()
+    if not learner:
+        raise HTTPException(status_code=404, detail="Learner not found")
+    learner.name = data.name
+    db.add(learner)
+    await db.commit()
+    await db.refresh(learner)
+    return learner
+
+@router.delete("/learners/{learner_id}", status_code=204)
+async def delete_learner(learner_id: UUID, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(Learner).where(Learner.id == learner_id))
+    learner = result.one_or_none()
+    if not learner:
+        raise HTTPException(status_code=404, detail="Learner not found")
+    # Delete all test results and sessions for this learner
+    results = await db.exec(select(TestResult).where(TestResult.learner_id == learner_id))
+    for r in results.all():
+        await db.delete(r)
+    sessions = await db.exec(select(TestSession).where(TestSession.learner_id == learner_id))
+    for s in sessions.all():
+        await db.delete(s)
+    await db.delete(learner)
+    await db.commit()
+
 
 # --- Test sessions ---
 
@@ -104,6 +132,19 @@ async def create_test_session(data: TestSessionCreate, db: AsyncSession = Depend
         "tested_at": session.tested_at.isoformat(),
         "results_count": len(data.results),
     }
+
+@router.delete("/test-sessions/{session_id}", status_code=204)
+async def delete_test_session(session_id: UUID, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(TestSession).where(TestSession.id == session_id))
+    session = result.one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    # Delete all results in this session
+    results = await db.exec(select(TestResult).where(TestResult.session_id == session_id))
+    for r in results.all():
+        await db.delete(r)
+    await db.delete(session)
+    await db.commit()
 
 @router.get("/learners/{learner_id}/sessions")
 async def list_sessions(learner_id: UUID, db: AsyncSession = Depends(get_session)):
