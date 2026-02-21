@@ -91,22 +91,29 @@ async def ask_question(req: AskRequest, db: AsyncSession = Depends(get_session))
     if not BEDROCK_BEARER_TOKEN:
         raise HTTPException(status_code=503, detail="Bedrock API not configured")
 
-    # Call Claude on Bedrock to generate SQL
+    # Call Claude on Bedrock via bearer token auth
     try:
-        from anthropic import AnthropicBedrock
+        import httpx as _httpx
 
-        client = AnthropicBedrock(
-            aws_profile="claude",
-            aws_region="us-west-2",
+        bedrock_url = f"https://bedrock-runtime.us-west-2.amazonaws.com/model/{BEDROCK_MODEL}/invoke"
+        resp = _httpx.post(
+            bedrock_url,
+            headers={
+                "Authorization": f"Bearer {BEDROCK_BEARER_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 1024,
+                "system": SYSTEM_PROMPT,
+                "messages": [{"role": "user", "content": req.question}],
+            },
+            timeout=30,
         )
-
-        message = client.messages.create(
-            model=BEDROCK_MODEL,
-            max_tokens=1024,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": req.question}],
-        )
-        sql = message.content[0].text.strip()
+        if resp.status_code != 200:
+            raise Exception(f"Bedrock returned {resp.status_code}: {resp.text[:200]}")
+        message = resp.json()
+        sql = message["content"][0]["text"].strip()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"LLM error: {str(e)}")
 
