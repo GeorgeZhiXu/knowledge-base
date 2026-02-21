@@ -1,13 +1,14 @@
 # Knowledge Base
 
-Curriculum knowledge base API for storing and querying lesson content. Focused on Chinese (人教版 PEP) with an extensible schema for other subjects.
+Curriculum knowledge base API for storing and querying lesson content, tracking learner progress, and AI-powered natural language queries. Focused on Chinese (人教版 PEP) with an extensible schema for other subjects.
 
 ## Architecture
 
 - **Backend**: Python FastAPI + SQLModel + SQLite
-- **Port**: 8020
-- **Gateway**: `/knowledgebase/` (auth required)
+- **Port**: 8020 (API), 8021 (Datasette viewer)
+- **Gateway**: `/knowledgebase/` (API), `/datasette/` (DB viewer)
 - **API docs**: `/knowledgebase/docs` (Swagger UI)
+- **AI queries**: Claude on Bedrock via `/api/v1/ask`
 
 ## Development & Deployment
 
@@ -22,7 +23,7 @@ Push to `main` triggers GitHub Actions deploy via SSH.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install fastapi "uvicorn[standard]" sqlmodel aiosqlite pydantic greenlet
+.venv/bin/pip install fastapi "uvicorn[standard]" sqlmodel aiosqlite pydantic greenlet anthropic httpx
 mkdir -p data
 .venv/bin/uvicorn app.api.main:app --host 127.0.0.1 --port 8020
 ```
@@ -95,6 +96,10 @@ Seeded automatically on startup.
 | stroke_count | int | optional |
 | radical | str | optional — `"亻"` |
 | structure | str | optional — `"独体"`, `"左右"`, `"上下"` |
+| frequency_rank | int | corpus rank (1=的, 2=一, 3=不, ...) |
+| frequency_level | int | 1=常用, 2=次常用, 3=rare |
+| frequency_count | int | raw corpus occurrences |
+| cumulative_percent | float | cumulative text coverage % |
 
 **character_lessons** (which characters appear in which lessons)
 
@@ -132,6 +137,39 @@ Seeded automatically on startup.
 | lesson_id | UUID | FK → lessons |
 | sort_order | int | display order in lesson |
 
+### Learner Activity Tracking
+
+**learners**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | PK |
+| name | str | unique |
+| created_at | datetime | |
+
+**test_sessions** (a quiz/practice session)
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | PK |
+| learner_id | UUID | FK → learners |
+| lesson_id | UUID | FK → lessons, optional |
+| title | str | optional |
+| tested_at | datetime | |
+| notes | str | optional |
+
+**test_results** (per-character result)
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | PK |
+| session_id | UUID | FK → test_sessions |
+| learner_id | UUID | FK → learners |
+| character | str(1) | FK → characters |
+| skill | str | `"read"` or `"write"` |
+| passed | bool | true=mastered, false=needs practice |
+| tested_at | datetime | |
+
 ### ER Diagram
 
 ```
@@ -139,11 +177,11 @@ subjects ─1:N─ textbooks ─1:N─ units ─1:N─ lessons
                                               │
                             ┌─────────────────┼─────────────────┐
                             │                 │                 │
-                     character_lessons   phrase_lessons          │
+                     character_lessons   phrase_lessons    test_sessions
                             │                 │                 │
-                       characters          phrases              │
+                       characters          phrases          test_results
                             │                 │                 │
-                            └────── phrase_characters ──────────┘
+                            └── phrase_characters ──┘       learners
 ```
 
 ## API Endpoints
@@ -151,69 +189,110 @@ subjects ─1:N─ textbooks ─1:N─ units ─1:N─ lessons
 ### Curriculum CRUD
 
 ```
-GET/POST  /api/v1/subjects
-GET/POST  /api/v1/textbooks
-GET       /api/v1/textbooks/{id}/units
-POST      /api/v1/units
-GET       /api/v1/units/{id}/lessons
-POST      /api/v1/lessons
-GET       /api/v1/lessons/{id}
+GET/POST/DELETE  /api/v1/subjects
+GET/POST         /api/v1/textbooks
+DELETE           /api/v1/textbooks/{id}
+GET              /api/v1/textbooks/{id}/units
+POST/DELETE      /api/v1/units
+GET              /api/v1/units/{id}/lessons
+POST             /api/v1/lessons
+GET/DELETE       /api/v1/lessons/{id}
 ```
 
 ### Characters & Phrases
 
 ```
-GET/POST  /api/v1/characters
-GET       /api/v1/characters/{char}           — details + lessons + phrases
-GET       /api/v1/characters/{char}/phrases   — all phrases containing this character
-GET/POST  /api/v1/phrases
-GET       /api/v1/requirement-types
+GET/POST         /api/v1/characters
+GET/DELETE       /api/v1/characters/{char}         — details + lessons + phrases
+GET              /api/v1/characters/{char}/phrases
+GET/POST         /api/v1/phrases
+DELETE           /api/v1/phrases/{id}
+GET              /api/v1/requirement-types
 ```
 
 ### Lesson Content
 
 ```
-GET/POST  /api/v1/lessons/{id}/characters     — characters in a lesson
-GET/POST  /api/v1/lessons/{id}/phrases        — phrases in a lesson
+GET/POST  /api/v1/lessons/{id}/characters
+GET/POST  /api/v1/lessons/{id}/phrases
 ```
 
 ### Cumulative Queries
 
 ```
-GET       /api/v1/textbooks/{id}/characters?up_to_lesson=N
-GET       /api/v1/textbooks/{id}/phrases?up_to_lesson=N
+GET  /api/v1/textbooks/{id}/characters?up_to_lesson=N
+GET  /api/v1/textbooks/{id}/phrases?up_to_lesson=N
 ```
 
-### Bulk Import
+### Learner Activity
 
 ```
-POST      /api/v1/import/lesson
+GET/POST         /api/v1/learners
+GET/PUT/DELETE   /api/v1/learners/{id}
+POST             /api/v1/test-sessions
+DELETE           /api/v1/test-sessions/{id}
+GET              /api/v1/learners/{id}/sessions
+GET              /api/v1/learners/{id}/progress
+GET              /api/v1/learners/{id}/progress/characters?skill=read&status=failed
+GET              /api/v1/learners/{id}/characters/{char}/history
 ```
 
-Payload:
+#### Submit test session:
 ```json
+POST /api/v1/test-sessions
 {
-  "lesson_id": "uuid",
-  "characters": [
-    {"character": "天", "pinyin": "tiān", "requirement": "recognize"},
-    {"character": "人", "pinyin": "rén", "requirement": "write"}
-  ],
-  "phrases": [
-    {"phrase": "天地", "pinyin": "tiān dì"},
-    {"phrase": "人民", "pinyin": "rén mín", "meaning": "people"}
+  "learner_id": "uuid",
+  "title": "一年级上册 第1课",
+  "results": [
+    {"character": "天", "skill": "read", "passed": true},
+    {"character": "天", "skill": "write", "passed": false}
   ]
 }
 ```
 
-## Example: 人教版一年级上册
+#### Progress response:
+```json
+GET /api/v1/learners/{id}/progress
+{
+  "total_characters_tested": 3,
+  "total_sessions": 1,
+  "read": {"mastered": 3, "total": 3},
+  "write": {"mastered": 2, "total": 3}
+}
+```
+
+### AI Natural Language Query
 
 ```
-Subject: 语文 (chinese)
-Textbook: 人教版一年级上册 (grade=1, volume=1)
-  Unit 1: 第一单元
-    Lesson 1: 天地人
-      Characters: 天(recognize), 地(recognize), 人(recognize)
-      Phrases: 天地, 人民
-    Lesson 2: 金木水火土
-      Characters: 金(recognize), 木(recognize), 水(recognize), 火(recognize), 土(recognize)
+POST /api/v1/ask
+{"question": "一年级上册所有会写的字"}
+→ {
+    "sql": "SELECT ... FROM ...",
+    "results": [...],
+    "row_count": 42
+  }
 ```
+
+Powered by Claude on Bedrock. Converts natural language to SQL, executes read-only queries.
+
+### Bulk Import
+
+```
+POST /api/v1/import/textbook   — entire textbook with units/lessons/characters/phrases
+POST /api/v1/import/lesson     — characters + phrases for an existing lesson
+POST /api/v1/import/frequency  — character frequency rankings
+```
+
+## Data
+
+The SQLite database is committed to git (`data/knowledge.db`) for portability.
+
+Current content:
+- 12 textbooks (人教版 grades 1–6, 上册+下册)
+- ~300 lessons, ~1,500 phrases
+- ~12,800 characters with corpus frequency data (Jun Da/MTSU)
+- Frequency coverage: top 100→39%, top 1000→86%, top 3500→99%
+
+## Additional Services
+
+- **Datasette**: Read-only web UI at `/datasette/` (port 8021) for browsing tables and running SQL
