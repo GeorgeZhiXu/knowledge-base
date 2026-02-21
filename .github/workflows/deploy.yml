@@ -54,7 +54,7 @@ jobs:
             if [ ! -d ".venv" ]; then
               python3 -m venv .venv
             fi
-            .venv/bin/pip install fastapi "uvicorn[standard]" sqlmodel aiosqlite pydantic greenlet -q
+            .venv/bin/pip install fastapi "uvicorn[standard]" sqlmodel aiosqlite pydantic greenlet anthropic -q
 
             # Ensure data directory exists
             mkdir -p data

@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy import text
 from app.core.database import init_db, engine
-from app.api.routes import curriculum, characters, import_data
+from app.api.routes import curriculum, characters, import_data, ask
 from app.models.models import RequirementType
 from app.core.database import async_session
 from sqlmodel import select
@@ -70,6 +70,7 @@ app.add_middleware(
 app.include_router(curriculum.router, prefix="/api/v1", tags=["curriculum"])
 app.include_router(characters.router, prefix="/api/v1", tags=["characters"])
 app.include_router(import_data.router, prefix="/api/v1", tags=["import"])
+app.include_router(ask.router, prefix="/api/v1", tags=["ask"])
 
 
 @app.get("/health")
