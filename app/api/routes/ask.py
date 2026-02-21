@@ -43,6 +43,14 @@ phrase_characters (phrase_id UUID FK→phrases, character TEXT(1) FK→character
 
 phrase_lessons (id UUID PK, phrase_id UUID FK→phrases, lesson_id UUID FK→lessons, sort_order INT)
 
+learners (id UUID PK, name TEXT, created_at DATETIME)
+
+test_sessions (id UUID PK, learner_id UUID FK→learners, lesson_id UUID FK→lessons nullable, title TEXT, tested_at DATETIME, notes TEXT)
+  -- a quiz/practice session for a learner
+
+test_results (id UUID PK, session_id UUID FK→test_sessions, learner_id UUID FK→learners, character TEXT(1) FK→characters, skill TEXT, passed BOOL, tested_at DATETIME)
+  -- skill: 'read' or 'write'. passed: true=mastered, false=needs practice
+
 Key relationships:
 - subjects → textbooks → units → lessons (curriculum hierarchy)
 - characters ←→ character_lessons ←→ lessons (which characters in which lessons)
