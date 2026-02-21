@@ -43,6 +43,11 @@ async def list_learners(db: AsyncSession = Depends(get_session)):
 
 @router.post("/learners", status_code=201)
 async def create_learner(data: LearnerCreate, db: AsyncSession = Depends(get_session)):
+    # Return existing learner if name already exists
+    result = await db.exec(select(Learner).where(Learner.name == data.name))
+    existing = result.one_or_none()
+    if existing:
+        return existing
     learner = Learner(name=data.name)
     db.add(learner)
     await db.commit()

@@ -117,7 +117,7 @@ class PhraseLesson(SQLModel, table=True):
 class Learner(SQLModel, table=True):
     __tablename__ = "learners"
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    name: str = Field(max_length=100)
+    name: str = Field(max_length=100, unique=True, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
