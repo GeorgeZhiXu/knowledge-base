@@ -94,6 +94,8 @@ class Phrase(SQLModel, table=True):
     phrase: str = Field(unique=True, max_length=100, index=True)
     pinyin: str = Field(max_length=200, default="")
     meaning: Optional[str] = Field(default=None, max_length=500)
+    frequency_rank: Optional[int] = Field(default=None, index=True)
+    frequency_count: Optional[int] = Field(default=None)
     notes: Optional[str] = Field(default=None, max_length=500)
 
 

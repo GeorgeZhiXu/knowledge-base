@@ -38,10 +38,11 @@ async def migrate_db():
             ("frequency_count", "INTEGER"),
             ("cumulative_percent", "REAL"),
         ]:
-            try:
-                await conn.execute(text(f"ALTER TABLE characters ADD COLUMN {col} {coltype}"))
-            except Exception:
-                pass  # Column already exists
+            for table in ["characters", "phrases"]:
+                try:
+                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}"))
+                except Exception:
+                    pass  # Column already exists
 
 
 @asynccontextmanager

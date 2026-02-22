@@ -282,3 +282,38 @@ async def import_frequency_data(data: FrequencyImport, db: AsyncSession = Depend
             created += 1
     await db.commit()
     return {"status": "ok", "created": created, "updated": updated}
+
+
+class PhraseFrequencyEntry(BaseModel):
+    phrase: str
+    frequency_rank: int
+    frequency_count: Optional[int] = None
+
+class PhraseFrequencyImport(BaseModel):
+    phrases: list[PhraseFrequencyEntry]
+
+@router.post("/import/phrase-frequency")
+async def import_phrase_frequency(data: PhraseFrequencyImport, db: AsyncSession = Depends(get_session)):
+    """Import phrase frequency rankings. Creates new phrases or updates existing ones."""
+    created = 0
+    updated = 0
+    for entry in data.phrases:
+        result = await db.exec(
+            select(Phrase).where(Phrase.phrase == entry.phrase)
+        )
+        phrase = result.first()
+        if phrase:
+            phrase.frequency_rank = entry.frequency_rank
+            if entry.frequency_count is not None:
+                phrase.frequency_count = entry.frequency_count
+            db.add(phrase)
+            updated += 1
+        else:
+            db.add(Phrase(
+                phrase=entry.phrase,
+                frequency_rank=entry.frequency_rank,
+                frequency_count=entry.frequency_count,
+            ))
+            created += 1
+    await db.commit()
+    return {"status": "ok", "created": created, "updated": updated}
