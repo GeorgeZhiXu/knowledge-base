@@ -14,8 +14,7 @@ module.exports = {
       log_file: '/Users/xuzhi/prod/gateway/logs/knowledge-base.log',
       time: true,
       env: {
-        DATABASE_URL: 'sqlite+aiosqlite:///./data/knowledge.db',
-        AWS_BEARER_TOKEN_BEDROCK: process.env.AWS_BEARER_TOKEN_BEDROCK || ''
+        DATABASE_URL: 'sqlite+aiosqlite:///./data/knowledge.db'
       }
     }
   ]

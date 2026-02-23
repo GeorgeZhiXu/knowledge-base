@@ -4,3 +4,4 @@ __pycache__/
 *.egg-info/
 # data/*.db  — DB is committed for portability
 .ruff_cache/
+.env

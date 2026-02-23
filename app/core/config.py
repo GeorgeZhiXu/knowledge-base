@@ -1,3 +1,9 @@
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import os
 
 DATABASE_URL = os.environ.get(
