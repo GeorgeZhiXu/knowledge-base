@@ -79,10 +79,13 @@ jobs:
             mkdir -p "$GATEWAY_DIR/config/services.d" "$GATEWAY_DIR/pm2.d"
             cp gateway/nginx.conf "$GATEWAY_DIR/config/services.d/knowledgebase.conf"
             cp gateway/pm2.config.js "$GATEWAY_DIR/pm2.d/knowledge-base.config.js"
+            cp gateway/datasette-pm2.config.js "$GATEWAY_DIR/pm2.d/knowledge-datasette.config.js"
 
-            # Restart service
+            # Restart services
             pm2 delete knowledge-base 2>/dev/null || true
             pm2 start "$GATEWAY_DIR/pm2.d/knowledge-base.config.js"
+            pm2 delete knowledge-datasette 2>/dev/null || true
+            pm2 start "$GATEWAY_DIR/pm2.d/knowledge-datasette.config.js"
             pm2 save
 
             # Reload nginx
