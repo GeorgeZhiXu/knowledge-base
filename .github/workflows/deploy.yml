@@ -46,7 +46,17 @@ jobs:
             else
               cd "$PROD_DIR"
               git remote set-url origin "$REPO_URL"
+              # Backup database before pull (in case git touches it)
+              if [ -f data/knowledge.db ]; then
+                cp data/knowledge.db data/knowledge.db.pre-deploy
+              fi
               git pull origin main
+              # Restore database if pull removed it
+              if [ ! -f data/knowledge.db ] && [ -f data/knowledge.db.pre-deploy ]; then
+                mv data/knowledge.db.pre-deploy data/knowledge.db
+              else
+                rm -f data/knowledge.db.pre-deploy
+              fi
               git remote set-url origin "https://github.com/GeorgeZhiXu/knowledge-base.git"
             fi
             cd "$PROD_DIR"
