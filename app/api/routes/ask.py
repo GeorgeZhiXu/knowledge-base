@@ -27,10 +27,8 @@ lessons (id UUID PK, unit_id UUID FK→units, lesson_number INT, title TEXT, pag
 requirement_types (id UUID PK, code TEXT UNIQUE, label TEXT)
   -- codes: 'recognize' (认识), 'read' (会读), 'write' (会写), 'recite' (背诵)
 
-characters (character TEXT(1) PK, pinyin TEXT, stroke_count INT, radical TEXT, structure TEXT, frequency_rank INT, frequency_level INT, frequency_count INT, cumulative_percent REAL, notes TEXT)
-  -- frequency_rank: corpus-based rank (1=的, 2=一, 3=不, ..., up to ~12000)
-  -- frequency_level: 1=常用(top 3500), 2=次常用(3501-6500), 3=rare(6501+)
-  -- frequency_count: raw occurrence count in corpus
+characters (character TEXT(1) PK, pinyin TEXT, standard_level INT, cumulative_percent REAL)
+  -- standard_level: 《通用规范汉字表》level — 1=常用(top 3500), 2=次常用(3501-6500), 3=rare(6501+)
   -- cumulative_percent: cumulative text coverage up to this rank
 
 character_lessons (id UUID PK, character TEXT(1) FK→characters, lesson_id UUID FK→lessons, requirement_id UUID FK→requirement_types, sort_order INT)
@@ -73,7 +71,7 @@ Rules:
 - Return ONLY the SQL query, no explanation, no markdown, no code fences. Just the raw SQL.
 - For Chinese character lookups, the character column is the primary key (single character like '人').
 - When joining through the curriculum hierarchy, remember: textbooks → units → lessons.
-- Use frequency_rank for ordering by commonness (lower = more common).
+- Use standard_level for filtering by commonness (1=常用, 2=次常用, 3=rare). Lower standard_level = more common.
 """
 
 UNSAFE_PATTERN = re.compile(

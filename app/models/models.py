@@ -69,14 +69,8 @@ class Character(SQLModel, table=True):
     __tablename__ = "characters"
     character: str = Field(primary_key=True, max_length=1)
     pinyin: str = Field(max_length=50, default="")
-    stroke_count: Optional[int] = None
-    radical: Optional[str] = Field(default=None, max_length=10)
-    structure: Optional[str] = Field(default=None, max_length=20)
-    frequency_rank: Optional[int] = Field(default=None, index=True)
-    frequency_level: Optional[int] = Field(default=None)  # 1=常用, 2=次常用, 3=rare
-    frequency_count: Optional[int] = Field(default=None)  # raw corpus count
-    cumulative_percent: Optional[float] = Field(default=None)  # cumulative coverage %
-    notes: Optional[str] = Field(default=None, max_length=500)
+    standard_level: Optional[int] = Field(default=None)  # 《通用规范汉字表》: 1=常用(top 3500), 2=次常用(3501-6500), 3=rare(6501+)
+    cumulative_percent: Optional[float] = Field(default=None)  # cumulative text coverage %
 
 
 class CharacterLesson(SQLModel, table=True):

@@ -29,20 +29,40 @@ async def seed_requirement_types():
 
 
 async def migrate_db():
-    """Add new columns to existing tables if they don't exist."""
+    """Run schema migrations for existing databases."""
     async with engine.begin() as conn:
-        # SQLite ALTER TABLE to add columns if missing
+        # --- Characters table: rename frequency_level -> standard_level, drop old columns ---
+        result = await conn.execute(text("PRAGMA table_info(characters)"))
+        char_columns = {row[1] for row in result.fetchall()}
+
+        if "frequency_level" in char_columns and "standard_level" not in char_columns:
+            await conn.execute(text(
+                "ALTER TABLE characters RENAME COLUMN frequency_level TO standard_level"
+            ))
+        if "cumulative_percent" not in char_columns:
+            try:
+                await conn.execute(text("ALTER TABLE characters ADD COLUMN cumulative_percent REAL"))
+            except Exception:
+                pass
+        for col in ["stroke_count", "radical", "structure", "notes",
+                     "frequency_rank", "frequency_count"]:
+            if col in char_columns:
+                try:
+                    await conn.execute(text(f"ALTER TABLE characters DROP COLUMN {col}"))
+                except Exception:
+                    pass
+
+        # --- Phrases table: add columns if missing ---
         for col, coltype in [
             ("frequency_rank", "INTEGER"),
             ("frequency_level", "INTEGER"),
             ("frequency_count", "INTEGER"),
             ("cumulative_percent", "REAL"),
         ]:
-            for table in ["characters", "phrases"]:
-                try:
-                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}"))
-                except Exception:
-                    pass  # Column already exists
+            try:
+                await conn.execute(text(f"ALTER TABLE phrases ADD COLUMN {col} {coltype}"))
+            except Exception:
+                pass
 
 
 @asynccontextmanager

@@ -93,12 +93,7 @@ Seeded automatically on startup.
 |--------|------|-------|
 | character | str(1) | **PK** — e.g. `"人"` |
 | pinyin | str | `"rén"` |
-| stroke_count | int | optional |
-| radical | str | optional — `"亻"` |
-| structure | str | optional — `"独体"`, `"左右"`, `"上下"` |
-| frequency_rank | int | corpus rank (1=的, 2=一, 3=不, ...) |
-| frequency_level | int | 1=常用, 2=次常用, 3=rare |
-| frequency_count | int | raw corpus occurrences |
+| standard_level | int | 《通用规范汉字表》: 1=常用(top 3500), 2=次常用(3501-6500), 3=rare(6501+) |
 | cumulative_percent | float | cumulative text coverage % |
 
 **character_lessons** (which characters appear in which lessons)

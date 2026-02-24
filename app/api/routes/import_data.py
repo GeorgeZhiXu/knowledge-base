@@ -22,9 +22,6 @@ router = APIRouter()
 class CharacterImport(BaseModel):
     character: str
     pinyin: str = ""
-    stroke_count: Optional[int] = None
-    radical: Optional[str] = None
-    structure: Optional[str] = None
     requirement: str = "recognize"
 
 class PhraseImport(BaseModel):
@@ -95,7 +92,6 @@ async def _import_characters_and_phrases(
         if not existing.one_or_none():
             db.add(Character(
                 character=ch.character, pinyin=ch.pinyin,
-                stroke_count=ch.stroke_count, radical=ch.radical, structure=ch.structure,
             ))
             stats["characters"] += 1
 
@@ -241,9 +237,7 @@ async def import_lesson_data(data: LessonDataImport, db: AsyncSession = Depends(
 class FrequencyEntry(BaseModel):
     character: str
     pinyin: str = ""
-    frequency_rank: int
-    frequency_level: int = 1
-    frequency_count: Optional[int] = None
+    standard_level: int = 1
     cumulative_percent: Optional[float] = None
 
 class FrequencyImport(BaseModel):
@@ -251,7 +245,7 @@ class FrequencyImport(BaseModel):
 
 @router.post("/import/frequency")
 async def import_frequency_data(data: FrequencyImport, db: AsyncSession = Depends(get_session)):
-    """Import character frequency rankings. Creates new characters or updates existing ones."""
+    """Import character standard levels. Creates new characters or updates existing ones."""
     created = 0
     updated = 0
     for entry in data.characters:
@@ -260,10 +254,7 @@ async def import_frequency_data(data: FrequencyImport, db: AsyncSession = Depend
         )
         char = result.one_or_none()
         if char:
-            char.frequency_rank = entry.frequency_rank
-            char.frequency_level = entry.frequency_level
-            if entry.frequency_count is not None:
-                char.frequency_count = entry.frequency_count
+            char.standard_level = entry.standard_level
             if entry.cumulative_percent is not None:
                 char.cumulative_percent = entry.cumulative_percent
             if entry.pinyin and not char.pinyin:
@@ -274,9 +265,7 @@ async def import_frequency_data(data: FrequencyImport, db: AsyncSession = Depend
             db.add(Character(
                 character=entry.character,
                 pinyin=entry.pinyin,
-                frequency_rank=entry.frequency_rank,
-                frequency_level=entry.frequency_level,
-                frequency_count=entry.frequency_count,
+                standard_level=entry.standard_level,
                 cumulative_percent=entry.cumulative_percent,
             ))
             created += 1
