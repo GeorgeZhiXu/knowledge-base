@@ -62,10 +62,8 @@ jobs:
 
             # Always update .env file from secrets
             echo "Updating .env file from GitHub secrets..."
-            cat > .env << EOF
-DATABASE_URL=sqlite+aiosqlite:///./data/knowledge.db
-AWS_BEARER_TOKEN_BEDROCK=${AWS_BEARER_TOKEN_BEDROCK}
-EOF
+            echo "DATABASE_URL=sqlite+aiosqlite:///./data/knowledge.db" > .env
+            echo "AWS_BEARER_TOKEN_BEDROCK=$AWS_BEARER_TOKEN_BEDROCK" >> .env
 
             # Copy gateway configs
             mkdir -p "$GATEWAY_DIR/config/services.d" "$GATEWAY_DIR/pm2.d"
