@@ -5,3 +5,5 @@ __pycache__/
 # data/*.db  — DB is committed for portability
 .ruff_cache/
 .env
+data/knowledge.db
+data/*.db.backup.*
