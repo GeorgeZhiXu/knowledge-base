@@ -54,10 +54,21 @@ jobs:
             if [ ! -d ".venv" ]; then
               python3 -m venv .venv
             fi
-            .venv/bin/pip install fastapi "uvicorn[standard]" sqlmodel aiosqlite pydantic greenlet anthropic -q
+            .venv/bin/pip install fastapi "uvicorn[standard]" sqlmodel aiosqlite pydantic greenlet anthropic python-dotenv -q
 
             # Ensure data directory exists
             mkdir -p data
+
+            # Preserve or create .env file
+            if [ ! -f ".env" ]; then
+              echo "Creating .env file from secrets..."
+              cat > .env << EOF
+DATABASE_URL=sqlite+aiosqlite:///./data/knowledge.db
+AWS_BEARER_TOKEN_BEDROCK=${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+EOF
+            else
+              echo "Preserving existing .env file"
+            fi
 
             # Copy gateway configs
             mkdir -p "$GATEWAY_DIR/config/services.d" "$GATEWAY_DIR/pm2.d"
