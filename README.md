@@ -296,3 +296,4 @@ Current content:
 ## Additional Services
 
 - **Datasette**: Read-only web UI at `/datasette/` (port 8021) for browsing tables and running SQL
+# Deployment test - 20260224_001733
