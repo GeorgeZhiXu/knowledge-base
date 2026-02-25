@@ -65,9 +65,33 @@ Grade range: 1-6. Volume: 1=上册, 2=下册. Publisher: 人教版.
 To get all characters up to a certain point, join through units and textbooks and filter by grade/volume/lesson_number.
 
 Common query patterns:
-- "Top N most common characters": SELECT ... FROM characters WHERE cumulative_percent IS NOT NULL ORDER BY cumulative_percent ASC LIMIT N
-- "Characters [learner] failed": SELECT ... FROM characters c JOIN test_results tr ON tr.character = c.character JOIN learners l ON l.id = tr.learner_id WHERE l.name = '...' AND tr.passed = 0
-- "Top N common characters [learner] failed": Use a subquery to get top N by cumulative_percent, then JOIN with test_results filtered by learner name and passed = 0
+
+1. "Top N most common characters":
+   SELECT character, pinyin, cumulative_percent FROM characters
+   WHERE cumulative_percent IS NOT NULL ORDER BY cumulative_percent ASC LIMIT N
+
+2. "Characters [learner] failed":
+   SELECT DISTINCT c.character, c.pinyin FROM characters c
+   JOIN test_results tr ON tr.character = c.character
+   JOIN learners l ON l.id = tr.learner_id
+   WHERE l.name = '...' AND tr.passed = 0
+
+3. "Top N common characters that [learner] failed":
+   -- IMPORTANT: use a subquery to define the top-N pool first, then filter by learner results.
+   -- Do NOT just LIMIT the final output — that limits result rows, not the character pool.
+   SELECT DISTINCT c.character, c.pinyin, c.cumulative_percent FROM characters c
+   JOIN test_results tr ON tr.character = c.character
+   JOIN learners l ON l.id = tr.learner_id
+   WHERE l.name = '...' AND tr.passed = 0
+     AND c.character IN (
+       SELECT character FROM characters WHERE cumulative_percent IS NOT NULL
+       ORDER BY cumulative_percent ASC LIMIT N
+     )
+   ORDER BY c.cumulative_percent ASC
+
+Important:
+- A character can have MULTIPLE test_results rows (tested many times). Always use DISTINCT or GROUP BY on character to avoid duplicates.
+- "Top N characters" means define the pool of N characters via subquery first, then apply other filters. The final result may be fewer than N rows.
 """
 
 SYSTEM_PROMPT = f"""You are a SQL query generator for a Chinese language education knowledge base.
