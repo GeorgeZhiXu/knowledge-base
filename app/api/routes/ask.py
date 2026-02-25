@@ -29,7 +29,10 @@ requirement_types (id UUID PK, code TEXT UNIQUE, label TEXT)
 
 characters (character TEXT(1) PK, pinyin TEXT, standard_level INT, cumulative_percent REAL)
   -- standard_level: 《通用规范汉字表》level — 1=常用(top 3500), 2=次常用(3501-6500), 3=rare(6501+)
-  -- cumulative_percent: cumulative text coverage up to this rank
+  -- cumulative_percent: cumulative text coverage percentage. LOWER value = MORE common character.
+  --   e.g. 的=4.65%, 一=7.06%, 是=8.97% ... 99%+ are very rare characters.
+  --   IMPORTANT: many characters have NULL cumulative_percent. Always filter with "cumulative_percent IS NOT NULL" when querying by frequency.
+  --   "Top N most common characters" = ORDER BY cumulative_percent ASC LIMIT N (lowest % = most common)
 
 character_lessons (id UUID PK, character TEXT(1) FK→characters, lesson_id UUID FK→lessons, requirement_id UUID FK→requirement_types, sort_order INT)
   -- links characters to lessons with requirement type
@@ -41,22 +44,30 @@ phrase_characters (phrase_id UUID FK→phrases, character TEXT(1) FK→character
 
 phrase_lessons (id UUID PK, phrase_id UUID FK→phrases, lesson_id UUID FK→lessons, sort_order INT)
 
-learners (id UUID PK, name TEXT, created_at DATETIME)
+learners (id UUID PK, name TEXT UNIQUE, created_at DATETIME)
+  -- e.g. name='Ada'
 
 test_sessions (id UUID PK, learner_id UUID FK→learners, lesson_id UUID FK→lessons nullable, title TEXT, tested_at DATETIME, notes TEXT)
   -- a quiz/practice session for a learner
 
 test_results (id UUID PK, session_id UUID FK→test_sessions, learner_id UUID FK→learners, character TEXT(1) FK→characters, skill TEXT, passed BOOL, tested_at DATETIME)
-  -- skill: 'read' or 'write'. passed: true=mastered, false=needs practice
+  -- skill: 'read' or 'write'. passed: 1=mastered, 0=needs practice
+  -- To find a learner's failed characters: JOIN learners ON learners.id = test_results.learner_id WHERE learners.name = '...' AND passed = 0
 
 Key relationships:
 - subjects → textbooks → units → lessons (curriculum hierarchy)
 - characters ←→ character_lessons ←→ lessons (which characters in which lessons)
 - characters ←→ phrase_characters ←→ phrases (which characters in which phrases)
 - phrases ←→ phrase_lessons ←→ lessons (which phrases in which lessons)
+- learners ←→ test_results ←→ characters (learner test history per character)
 
 Grade range: 1-6. Volume: 1=上册, 2=下册. Publisher: 人教版.
 To get all characters up to a certain point, join through units and textbooks and filter by grade/volume/lesson_number.
+
+Common query patterns:
+- "Top N most common characters": SELECT ... FROM characters WHERE cumulative_percent IS NOT NULL ORDER BY cumulative_percent ASC LIMIT N
+- "Characters [learner] failed": SELECT ... FROM characters c JOIN test_results tr ON tr.character = c.character JOIN learners l ON l.id = tr.learner_id WHERE l.name = '...' AND tr.passed = 0
+- "Top N common characters [learner] failed": Use a subquery to get top N by cumulative_percent, then JOIN with test_results filtered by learner name and passed = 0
 """
 
 SYSTEM_PROMPT = f"""You are a SQL query generator for a Chinese language education knowledge base.
@@ -71,7 +82,10 @@ Rules:
 - Return ONLY the SQL query, no explanation, no markdown, no code fences. Just the raw SQL.
 - For Chinese character lookups, the character column is the primary key (single character like '人').
 - When joining through the curriculum hierarchy, remember: textbooks → units → lessons.
-- Use standard_level for filtering by commonness (1=常用, 2=次常用, 3=rare). Lower standard_level = more common.
+- When filtering by frequency/commonness, ALWAYS add "cumulative_percent IS NOT NULL" to exclude characters without frequency data.
+- Lower cumulative_percent = more common. "Top N" or "most common N" means ORDER BY cumulative_percent ASC LIMIT N.
+- When the user mentions a learner by name (e.g. "Ada"), always JOIN learners table on name, never assume the ID.
+- Use standard_level for broad filtering (1=常用, 2=次常用, 3=rare). Use cumulative_percent for precise ranking.
 """
 
 UNSAFE_PATTERN = re.compile(
