@@ -9,8 +9,8 @@ from sqlmodel import select
 
 from app.core.database import get_session
 from app.models.models import (
-    Lesson, Character, CharacterLesson, RequirementType,
-    Phrase, PhraseCharacter, PhraseLesson,
+    Lesson, Character, CharacterLesson,
+    Phrase, PhraseLesson,
 )
 
 router = APIRouter()
@@ -57,44 +57,32 @@ class LessonDataImport(BaseModel):
     phrases: list[PhraseImport] = []
 
 
-async def _get_requirement_map(db: AsyncSession) -> dict[str, UUID]:
-    result = await db.exec(select(RequirementType))
-    return {rt.code: rt.id for rt in result.all()}
-
-
 async def _import_characters_and_phrases(
     db: AsyncSession,
     lesson_id: UUID,
     characters: list[CharacterImport],
     phrases: list[PhraseImport],
-    req_map: dict[str, UUID],
 ) -> dict:
     stats = {"characters": 0, "character_lessons": 0, "phrases": 0, "phrase_lessons": 0}
 
     for i, ch in enumerate(characters):
-        # Create or get character
         existing = await db.exec(select(Character).where(Character.character == ch.character))
         if not existing.one_or_none():
-            db.add(Character(
-                character=ch.character, pinyin=ch.pinyin,
-            ))
+            db.add(Character(character=ch.character, pinyin=ch.pinyin))
             stats["characters"] += 1
 
-        # Link to lesson
-        req_id = req_map.get(ch.requirement)
-        if req_id:
-            existing_cl = await db.exec(
-                select(CharacterLesson)
-                .where(CharacterLesson.character == ch.character)
-                .where(CharacterLesson.lesson_id == lesson_id)
-                .where(CharacterLesson.requirement_id == req_id)
-            )
-            if not existing_cl.one_or_none():
-                db.add(CharacterLesson(
-                    character=ch.character, lesson_id=lesson_id,
-                    requirement_id=req_id, sort_order=i,
-                ))
-                stats["character_lessons"] += 1
+        existing_cl = await db.exec(
+            select(CharacterLesson)
+            .where(CharacterLesson.character == ch.character)
+            .where(CharacterLesson.lesson_id == lesson_id)
+            .where(CharacterLesson.requirement == ch.requirement)
+        )
+        if not existing_cl.one_or_none():
+            db.add(CharacterLesson(
+                character=ch.character, lesson_id=lesson_id,
+                requirement=ch.requirement, sort_order=i,
+            ))
+            stats["character_lessons"] += 1
 
     for i, ph in enumerate(phrases):
         existing = await db.exec(select(Phrase).where(Phrase.phrase == ph.phrase))
@@ -105,13 +93,6 @@ async def _import_characters_and_phrases(
             await db.flush()
             stats["phrases"] += 1
 
-            # Auto-link phrase characters
-            for j, ch_str in enumerate(ph.phrase):
-                ch_exists = await db.exec(select(Character).where(Character.character == ch_str))
-                if ch_exists.one_or_none():
-                    db.add(PhraseCharacter(phrase_id=phrase.id, character=ch_str, position=j))
-
-        # Link to lesson
         existing_pl = await db.exec(
             select(PhraseLesson)
             .where(PhraseLesson.phrase_id == phrase.id)
@@ -129,7 +110,6 @@ async def import_textbook(data: FullImport, db: AsyncSession = Depends(get_sessi
     """Import an entire textbook with all units, lessons, characters, and phrases.
 
     """
-    req_map = await _get_requirement_map(db)
     tb = data.textbook
 
     totals = {"lessons": 0, "characters": 0, "character_lessons": 0,
@@ -149,7 +129,7 @@ async def import_textbook(data: FullImport, db: AsyncSession = Depends(get_sessi
             totals["lessons"] += 1
 
             stats = await _import_characters_and_phrases(
-                db, lesson.id, lesson_data.characters, lesson_data.phrases, req_map,
+                db, lesson.id, lesson_data.characters, lesson_data.phrases,
             )
             for k, v in stats.items():
                 totals[k] += v
@@ -161,9 +141,8 @@ async def import_textbook(data: FullImport, db: AsyncSession = Depends(get_sessi
 @router.post("/import/lesson")
 async def import_lesson_data(data: LessonDataImport, db: AsyncSession = Depends(get_session)):
     """Import characters and phrases for an existing lesson."""
-    req_map = await _get_requirement_map(db)
     stats = await _import_characters_and_phrases(
-        db, data.lesson_id, data.characters, data.phrases, req_map,
+        db, data.lesson_id, data.characters, data.phrases,
     )
     await db.commit()
     return {"status": "ok", **stats}

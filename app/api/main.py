@@ -5,27 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from app.core.database import init_db, engine
 from app.api.routes import curriculum, characters, import_data, ask, learners
-from app.models.models import RequirementType
-from app.core.database import async_session
-from sqlmodel import select
-
-
-async def seed_requirement_types():
-    """Seed default requirement types if they don't exist."""
-    defaults = [
-        ("recognize", "认识"),
-        ("read", "会读"),
-        ("write", "会写"),
-        ("recite", "背诵"),
-    ]
-    async with async_session() as db:
-        for code, label in defaults:
-            result = await db.exec(
-                select(RequirementType).where(RequirementType.code == code)
-            )
-            if not result.one_or_none():
-                db.add(RequirementType(code=code, label=label))
-        await db.commit()
 
 
 async def migrate_db():
@@ -65,7 +44,6 @@ async def migrate_db():
 async def lifespan(app: FastAPI):
     await init_db()
     await migrate_db()
-    await seed_requirement_types()
     yield
 
 

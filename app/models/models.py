@@ -20,13 +20,8 @@ class Lesson(SQLModel, table=True):
     page_end: Optional[int] = None
 
 
-# --- Requirement types ---
-
-class RequirementType(SQLModel, table=True):
-    __tablename__ = "requirement_types"
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    code: str = Field(unique=True, max_length=50, index=True)
-    label: str = Field(max_length=100)
+# --- Requirement labels (not a DB table, just a mapping) ---
+REQUIREMENT_LABELS = {"recognize": "认识", "read": "会读", "write": "会写", "recite": "背诵"}
 
 
 # --- Chinese-specific tables ---
@@ -41,10 +36,9 @@ class Character(SQLModel, table=True):
 
 class CharacterLesson(SQLModel, table=True):
     __tablename__ = "character_lessons"
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    character: str = Field(foreign_key="characters.character", max_length=1, index=True)
-    lesson_id: UUID = Field(foreign_key="lessons.id", index=True)
-    requirement_id: UUID = Field(foreign_key="requirement_types.id")
+    character: str = Field(foreign_key="characters.character", max_length=1, primary_key=True)
+    lesson_id: UUID = Field(foreign_key="lessons.id", primary_key=True)
+    requirement: str = Field(max_length=20, primary_key=True)  # 'recognize' or 'write'
     sort_order: int = Field(default=0)
 
 
@@ -59,18 +53,10 @@ class Phrase(SQLModel, table=True):
     notes: Optional[str] = Field(default=None, max_length=500)
 
 
-class PhraseCharacter(SQLModel, table=True):
-    __tablename__ = "phrase_characters"
-    phrase_id: UUID = Field(foreign_key="phrases.id", primary_key=True)
-    character: str = Field(foreign_key="characters.character", max_length=1, primary_key=True)
-    position: int = Field(primary_key=True)
-
-
 class PhraseLesson(SQLModel, table=True):
     __tablename__ = "phrase_lessons"
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    phrase_id: UUID = Field(foreign_key="phrases.id", index=True)
-    lesson_id: UUID = Field(foreign_key="lessons.id", index=True)
+    phrase_id: UUID = Field(foreign_key="phrases.id", primary_key=True)
+    lesson_id: UUID = Field(foreign_key="lessons.id", primary_key=True)
     sort_order: int = Field(default=0)
 
 

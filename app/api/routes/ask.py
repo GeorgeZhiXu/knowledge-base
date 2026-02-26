@@ -19,8 +19,6 @@ lessons (id UUID PK, grade INT, volume INT, unit_number INT, unit_title TEXT, le
   -- unit_title: e.g. '课文（一）', '识字', '汉语拼音（一）'
   -- Filter by textbook: WHERE grade=4 AND volume=1
 
-requirement_types (id UUID PK, code TEXT UNIQUE, label TEXT)
-  -- codes: 'recognize' (认识), 'read' (会读), 'write' (会写), 'recite' (背诵)
 
 characters (character TEXT(1) PK, pinyin TEXT, standard_level INT, cumulative_percent REAL)
   -- standard_level: 《通用规范汉字表》level — 1=常用(top 3500), 2=次常用(3501-6500), 3=rare(6501+)
@@ -29,15 +27,13 @@ characters (character TEXT(1) PK, pinyin TEXT, standard_level INT, cumulative_pe
   --   IMPORTANT: many characters have NULL cumulative_percent. Always filter with "cumulative_percent IS NOT NULL" when querying by frequency.
   --   "Top N most common characters" = ORDER BY cumulative_percent ASC LIMIT N (lowest % = most common)
 
-character_lessons (id UUID PK, character TEXT(1) FK→characters, lesson_id UUID FK→lessons, requirement_id UUID FK→requirement_types, sort_order INT)
-  -- links characters to lessons with requirement type
+character_lessons (character TEXT(1) FK→characters, lesson_id UUID FK→lessons, requirement TEXT, sort_order INT)
+  -- PK: (character, lesson_id, requirement). requirement: 'recognize' (认识) or 'write' (会写)
 
 phrases (id UUID PK, phrase TEXT UNIQUE, pinyin TEXT, meaning TEXT, notes TEXT)
 
-phrase_characters (phrase_id UUID FK→phrases, character TEXT(1) FK→characters, position INT)
-  -- links phrases to their constituent characters
-
-phrase_lessons (id UUID PK, phrase_id UUID FK→phrases, lesson_id UUID FK→lessons, sort_order INT)
+phrase_lessons (phrase_id UUID FK→phrases, lesson_id UUID FK→lessons, sort_order INT)
+  -- PK: (phrase_id, lesson_id)
 
 learners (id UUID PK, name TEXT UNIQUE, created_at DATETIME)
   -- e.g. name='Ada'
@@ -51,7 +47,7 @@ test_results (id UUID PK, session_id UUID FK→test_sessions, learner_id UUID FK
 
 Key relationships:
 - characters ←→ character_lessons ←→ lessons (which characters in which lessons)
-- characters ←→ phrase_characters ←→ phrases (which characters in which phrases)
+- To find phrases containing a character: WHERE INSTR(phrase, character) > 0
 - phrases ←→ phrase_lessons ←→ lessons (which phrases in which lessons)
 - learners ←→ test_results ←→ characters (learner test history per character)
 
