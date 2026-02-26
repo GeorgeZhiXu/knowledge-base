@@ -1,6 +1,5 @@
 """Routes for characters, phrases, lesson content, and cumulative queries."""
 
-from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, col
@@ -91,7 +90,7 @@ async def create_phrase(data: dict, db: AsyncSession = Depends(get_session)):
 # --- Lesson content ---
 
 @router.get("/lessons/{lesson_id}/characters")
-async def get_lesson_characters(lesson_id: UUID, db: AsyncSession = Depends(get_session)):
+async def get_lesson_characters(lesson_id: int, db: AsyncSession = Depends(get_session)):
     result = await db.exec(
         select(CharacterLesson, Character)
         .join(Character, CharacterLesson.character == Character.character)
@@ -107,7 +106,7 @@ async def get_lesson_characters(lesson_id: UUID, db: AsyncSession = Depends(get_
 
 @router.post("/lessons/{lesson_id}/characters", status_code=201)
 async def add_character_to_lesson(
-    lesson_id: UUID, data: dict, db: AsyncSession = Depends(get_session)
+    lesson_id: int, data: dict, db: AsyncSession = Depends(get_session)
 ):
     cl = CharacterLesson(
         character=data["character"],
@@ -122,7 +121,7 @@ async def add_character_to_lesson(
 
 
 @router.get("/lessons/{lesson_id}/phrases")
-async def get_lesson_phrases(lesson_id: UUID, db: AsyncSession = Depends(get_session)):
+async def get_lesson_phrases(lesson_id: int, db: AsyncSession = Depends(get_session)):
     result = await db.exec(
         select(Phrase)
         .join(PhraseLesson, Phrase.phrase == PhraseLesson.phrase)
@@ -134,7 +133,7 @@ async def get_lesson_phrases(lesson_id: UUID, db: AsyncSession = Depends(get_ses
 
 @router.post("/lessons/{lesson_id}/phrases", status_code=201)
 async def add_phrase_to_lesson(
-    lesson_id: UUID, data: dict, db: AsyncSession = Depends(get_session)
+    lesson_id: int, data: dict, db: AsyncSession = Depends(get_session)
 ):
     pl = PhraseLesson(
         phrase=data["phrase"],

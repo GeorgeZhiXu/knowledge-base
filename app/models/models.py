@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Optional
-from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel
 
@@ -9,7 +8,7 @@ from sqlmodel import Field, SQLModel
 
 class Lesson(SQLModel, table=True):
     __tablename__ = "lessons"
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     grade: int = Field(index=True)           # 1-6
     volume: int = Field(index=True)          # 1=上册, 2=下册
     unit_number: int = Field(default=0)
@@ -37,7 +36,7 @@ class Character(SQLModel, table=True):
 class CharacterLesson(SQLModel, table=True):
     __tablename__ = "character_lessons"
     character: str = Field(foreign_key="characters.character", max_length=1, primary_key=True)
-    lesson_id: UUID = Field(foreign_key="lessons.id", primary_key=True)
+    lesson_id: int = Field(foreign_key="lessons.id", primary_key=True)
     requirement: str = Field(max_length=20, primary_key=True)  # 'recognize' or 'write'
     sort_order: int = Field(default=0)
 
@@ -55,7 +54,7 @@ class Phrase(SQLModel, table=True):
 class PhraseLesson(SQLModel, table=True):
     __tablename__ = "phrase_lessons"
     phrase: str = Field(foreign_key="phrases.phrase", primary_key=True)
-    lesson_id: UUID = Field(foreign_key="lessons.id", primary_key=True)
+    lesson_id: int = Field(foreign_key="lessons.id", primary_key=True)
     sort_order: int = Field(default=0)
 
 
@@ -63,9 +62,9 @@ class PhraseLesson(SQLModel, table=True):
 
 class TestSession(SQLModel, table=True):
     __tablename__ = "test_sessions"
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    learner: str = Field(max_length=100, index=True)  # username from auth system
-    lesson_id: Optional[UUID] = Field(default=None, foreign_key="lessons.id")
+    id: Optional[int] = Field(default=None, primary_key=True)
+    learner: str = Field(max_length=100, index=True)
+    lesson_id: Optional[int] = Field(default=None, foreign_key="lessons.id")
     title: Optional[str] = Field(default=None, max_length=200)
     tested_at: datetime = Field(default_factory=datetime.utcnow)
     notes: Optional[str] = Field(default=None, max_length=500)
@@ -73,9 +72,9 @@ class TestSession(SQLModel, table=True):
 
 class TestResult(SQLModel, table=True):
     __tablename__ = "test_results"
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    learner: str = Field(max_length=100, index=True)  # username from auth system
-    session_id: Optional[UUID] = Field(default=None, foreign_key="test_sessions.id")
+    id: Optional[int] = Field(default=None, primary_key=True)
+    learner: str = Field(max_length=100, index=True)
+    session_id: Optional[int] = Field(default=None, foreign_key="test_sessions.id")
     character: str = Field(foreign_key="characters.character", max_length=1, index=True)
     skill: str = Field(max_length=20)  # "read" or "write"
     passed: bool = Field(default=False)

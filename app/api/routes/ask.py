@@ -14,7 +14,7 @@ router = APIRouter()
 DB_SCHEMA = """
 Tables in the knowledge base SQLite database:
 
-lessons (id UUID PK, grade INT, volume INT, unit_number INT, unit_title TEXT, lesson_number INT, title TEXT, page_start INT, page_end INT)
+lessons (id INTEGER PK AUTO, grade INT, volume INT, unit_number INT, unit_title TEXT, lesson_number INT, title TEXT, page_start INT, page_end INT)
   -- grade: 1-6. volume: 1=上册, 2=下册. e.g. grade=4, volume=1 = 四年级上册
   -- unit_title: e.g. '课文（一）', '识字', '汉语拼音（一）'
   -- Filter by textbook: WHERE grade=4 AND volume=1
@@ -27,18 +27,18 @@ characters (character TEXT(1) PK, pinyin TEXT, standard_level INT, cumulative_pe
   --   IMPORTANT: many characters have NULL cumulative_percent. Always filter with "cumulative_percent IS NOT NULL" when querying by frequency.
   --   "Top N most common characters" = ORDER BY cumulative_percent ASC LIMIT N (lowest % = most common)
 
-character_lessons (character TEXT(1) FK→characters, lesson_id UUID FK→lessons, requirement TEXT, sort_order INT)
+character_lessons (character TEXT(1) FK→characters, lesson_id INT FK→lessons, requirement TEXT, sort_order INT)
   -- PK: (character, lesson_id, requirement). requirement: 'recognize' (认识) or 'write' (会写)
 
 phrases (phrase TEXT PK, pinyin TEXT, meaning TEXT, frequency_rank INT, notes TEXT)
 
-phrase_lessons (phrase TEXT FK→phrases, lesson_id UUID FK→lessons, sort_order INT)
+phrase_lessons (phrase TEXT FK→phrases, lesson_id INT FK→lessons, sort_order INT)
   -- PK: (phrase, lesson_id)
 
-test_sessions (id UUID PK, learner TEXT, lesson_id UUID FK→lessons nullable, title TEXT, tested_at DATETIME, notes TEXT)
+test_sessions (id INTEGER PK AUTO, learner TEXT, lesson_id INT FK→lessons nullable, title TEXT, tested_at DATETIME, notes TEXT)
   -- a quiz/practice session. learner is a username string (e.g. 'Ada')
 
-test_results (learner TEXT, session_id UUID FK→test_sessions nullable, character TEXT(1) FK→characters, skill TEXT, passed BOOL, tested_at DATETIME)
+test_results (id INTEGER PK AUTO, learner TEXT, session_id INT FK→test_sessions nullable, character TEXT(1) FK→characters, skill TEXT, passed BOOL, tested_at DATETIME)
   -- skill: 'read' or 'write'. passed: 1=mastered, 0=needs practice
   -- To find a learner's failed characters: WHERE learner = 'Ada' AND passed = 0
 

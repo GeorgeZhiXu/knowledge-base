@@ -1,6 +1,6 @@
 """CRUD routes for curriculum lessons."""
 
-from uuid import UUID
+
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -46,7 +46,7 @@ async def create_lesson(data: LessonCreate, db: AsyncSession = Depends(get_sessi
 
 
 @router.get("/lessons/{lesson_id}")
-async def get_lesson(lesson_id: UUID, db: AsyncSession = Depends(get_session)):
+async def get_lesson(lesson_id: int, db: AsyncSession = Depends(get_session)):
     result = await db.exec(select(Lesson).where(Lesson.id == lesson_id))
     lesson = result.one_or_none()
     if not lesson:
@@ -55,7 +55,7 @@ async def get_lesson(lesson_id: UUID, db: AsyncSession = Depends(get_session)):
 
 
 @router.delete("/lessons/{lesson_id}", status_code=204)
-async def delete_lesson(lesson_id: UUID, db: AsyncSession = Depends(get_session)):
+async def delete_lesson(lesson_id: int, db: AsyncSession = Depends(get_session)):
     result = await db.exec(select(Lesson).where(Lesson.id == lesson_id))
     lesson = result.one_or_none()
     if not lesson:

@@ -1,6 +1,5 @@
 """Bulk import routes for populating knowledge base data efficiently."""
 
-from uuid import UUID
 from typing import Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -52,14 +51,14 @@ class FullImport(BaseModel):
 
 class LessonDataImport(BaseModel):
     """Import characters and phrases for an existing lesson."""
-    lesson_id: UUID
+    lesson_id: int
     characters: list[CharacterImport] = []
     phrases: list[PhraseImport] = []
 
 
 async def _import_characters_and_phrases(
     db: AsyncSession,
-    lesson_id: UUID,
+    lesson_id: int,
     characters: list[CharacterImport],
     phrases: list[PhraseImport],
 ) -> dict:

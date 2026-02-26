@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
-from uuid import UUID
+
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -25,7 +25,7 @@ class TestResultEntry(BaseModel):
 
 class TestSessionCreate(BaseModel):
     learner: str  # username
-    lesson_id: Optional[UUID] = None
+    lesson_id: Optional[int] = None
     title: Optional[str] = None
     notes: Optional[str] = None
     results: list[TestResultEntry] = []
@@ -69,7 +69,7 @@ async def create_test_session(data: TestSessionCreate, db: AsyncSession = Depend
     }
 
 @router.delete("/test-sessions/{session_id}", status_code=204)
-async def delete_test_session(session_id: UUID, db: AsyncSession = Depends(get_session)):
+async def delete_test_session(session_id: int, db: AsyncSession = Depends(get_session)):
     result = await db.exec(select(TestSession).where(TestSession.id == session_id))
     session = result.one_or_none()
     if not session:
