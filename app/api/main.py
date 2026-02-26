@@ -31,26 +31,22 @@ async def seed_requirement_types():
 async def migrate_db():
     """Run schema migrations for existing databases."""
     async with engine.begin() as conn:
-        # --- Characters table: rename frequency_level -> standard_level, drop old columns ---
-        result = await conn.execute(text("PRAGMA table_info(characters)"))
-        char_columns = {row[1] for row in result.fetchall()}
+        # --- Lessons table: flatten curriculum hierarchy ---
+        result = await conn.execute(text("PRAGMA table_info(lessons)"))
+        lesson_cols = {row[1] for row in result.fetchall()}
 
-        if "frequency_level" in char_columns and "standard_level" not in char_columns:
-            await conn.execute(text(
-                "ALTER TABLE characters RENAME COLUMN frequency_level TO standard_level"
-            ))
-        if "cumulative_percent" not in char_columns:
-            try:
-                await conn.execute(text("ALTER TABLE characters ADD COLUMN cumulative_percent REAL"))
-            except Exception:
-                pass
-        for col in ["stroke_count", "radical", "structure", "notes",
-                     "frequency_rank", "frequency_count"]:
-            if col in char_columns:
-                try:
-                    await conn.execute(text(f"ALTER TABLE characters DROP COLUMN {col}"))
-                except Exception:
-                    pass
+        if "unit_id" in lesson_cols and "grade" not in lesson_cols:
+            # Old schema: flatten subjects/textbooks/units into lessons
+            for col, coltype in [("grade", "INTEGER"), ("volume", "INTEGER"),
+                                  ("unit_number", "INTEGER"), ("unit_title", "TEXT")]:
+                await conn.execute(text(f"ALTER TABLE lessons ADD COLUMN {col} {coltype}"))
+            await conn.execute(text("""
+                UPDATE lessons SET
+                  grade = (SELECT t.grade FROM units u JOIN textbooks t ON t.id = u.textbook_id WHERE u.id = lessons.unit_id),
+                  volume = (SELECT t.volume FROM units u JOIN textbooks t ON t.id = u.textbook_id WHERE u.id = lessons.unit_id),
+                  unit_number = (SELECT u.unit_number FROM units u WHERE u.id = lessons.unit_id),
+                  unit_title = (SELECT u.title FROM units u WHERE u.id = lessons.unit_id)
+            """))
 
         # --- Phrases table: add columns if missing ---
         for col, coltype in [

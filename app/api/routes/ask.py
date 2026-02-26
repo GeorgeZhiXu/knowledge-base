@@ -14,15 +14,10 @@ router = APIRouter()
 DB_SCHEMA = """
 Tables in the knowledge base SQLite database:
 
-subjects (id UUID PK, code TEXT UNIQUE, name TEXT, created_at DATETIME)
-  -- e.g. code='chinese', name='语文'
-
-textbooks (id UUID PK, subject_id UUID FK→subjects, publisher TEXT, grade INT, volume INT, name TEXT, created_at DATETIME)
-  -- e.g. publisher='人教版', grade=1, volume=1 (上册), volume=2 (下册), name='一年级上册'
-
-units (id UUID PK, textbook_id UUID FK→textbooks, unit_number INT, title TEXT)
-
-lessons (id UUID PK, unit_id UUID FK→units, lesson_number INT, title TEXT, page_start INT, page_end INT)
+lessons (id UUID PK, grade INT, volume INT, unit_number INT, unit_title TEXT, lesson_number INT, title TEXT, page_start INT, page_end INT)
+  -- grade: 1-6. volume: 1=上册, 2=下册. e.g. grade=4, volume=1 = 四年级上册
+  -- unit_title: e.g. '课文（一）', '识字', '汉语拼音（一）'
+  -- Filter by textbook: WHERE grade=4 AND volume=1
 
 requirement_types (id UUID PK, code TEXT UNIQUE, label TEXT)
   -- codes: 'recognize' (认识), 'read' (会读), 'write' (会写), 'recite' (背诵)
@@ -55,14 +50,13 @@ test_results (id UUID PK, session_id UUID FK→test_sessions, learner_id UUID FK
   -- To find a learner's failed characters: JOIN learners ON learners.id = test_results.learner_id WHERE learners.name = '...' AND passed = 0
 
 Key relationships:
-- subjects → textbooks → units → lessons (curriculum hierarchy)
 - characters ←→ character_lessons ←→ lessons (which characters in which lessons)
 - characters ←→ phrase_characters ←→ phrases (which characters in which phrases)
 - phrases ←→ phrase_lessons ←→ lessons (which phrases in which lessons)
 - learners ←→ test_results ←→ characters (learner test history per character)
 
-Grade range: 1-6. Volume: 1=上册, 2=下册. Publisher: 人教版.
-To get all characters up to a certain point, join through units and textbooks and filter by grade/volume/lesson_number.
+To get all characters for a textbook: JOIN character_lessons ON lesson_id, filter lessons by grade AND volume.
+To get characters up to a certain lesson: additionally filter by unit_number and lesson_number.
 
 Common query patterns:
 
@@ -105,7 +99,7 @@ Rules:
 - LIMIT results to 200 rows max.
 - Return ONLY the SQL query, no explanation, no markdown, no code fences. Just the raw SQL.
 - For Chinese character lookups, the character column is the primary key (single character like '人').
-- When joining through the curriculum hierarchy, remember: textbooks → units → lessons.
+- Lessons contain grade/volume directly. No need for joins to get textbook info. Filter by grade AND volume.
 - When filtering by frequency/commonness, ALWAYS add "cumulative_percent IS NOT NULL" to exclude characters without frequency data.
 - Lower cumulative_percent = more common. "Top N" or "most common N" means ORDER BY cumulative_percent ASC LIMIT N.
 - When the user mentions a learner by name (e.g. "Ada"), always JOIN learners table on name, never assume the ID.

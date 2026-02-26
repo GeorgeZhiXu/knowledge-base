@@ -2,56 +2,22 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlmodel import Field, SQLModel, Relationship
+from sqlmodel import Field, SQLModel
 
 
-# --- Curriculum hierarchy (generic) ---
-
-class Subject(SQLModel, table=True):
-    __tablename__ = "subjects"
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    code: str = Field(unique=True, max_length=50, index=True)
-    name: str = Field(max_length=100)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-    textbooks: list["Textbook"] = Relationship(back_populates="subject")
-
-
-class Textbook(SQLModel, table=True):
-    __tablename__ = "textbooks"
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    subject_id: UUID = Field(foreign_key="subjects.id", index=True)
-    publisher: str = Field(max_length=100)
-    grade: int
-    volume: int  # 1=上册, 2=下册
-    name: str = Field(max_length=200)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-    subject: Optional[Subject] = Relationship(back_populates="textbooks")
-    units: list["Unit"] = Relationship(back_populates="textbook")
-
-
-class Unit(SQLModel, table=True):
-    __tablename__ = "units"
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    textbook_id: UUID = Field(foreign_key="textbooks.id", index=True)
-    unit_number: int
-    title: str = Field(max_length=200)
-
-    textbook: Optional[Textbook] = Relationship(back_populates="units")
-    lessons: list["Lesson"] = Relationship(back_populates="unit")
-
+# --- Curriculum ---
 
 class Lesson(SQLModel, table=True):
     __tablename__ = "lessons"
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    unit_id: UUID = Field(foreign_key="units.id", index=True)
-    lesson_number: int
+    grade: int = Field(index=True)           # 1-6
+    volume: int = Field(index=True)          # 1=上册, 2=下册
+    unit_number: int = Field(default=0)
+    unit_title: Optional[str] = Field(default=None, max_length=200)
+    lesson_number: int = Field(default=0)
     title: str = Field(max_length=200)
     page_start: Optional[int] = None
     page_end: Optional[int] = None
-
-    unit: Optional[Unit] = Relationship(back_populates="lessons")
 
 
 # --- Requirement types ---

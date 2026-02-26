@@ -9,8 +9,7 @@ from sqlmodel import select
 
 from app.core.database import get_session
 from app.models.models import (
-    Subject, Textbook, Unit, Lesson,
-    Character, CharacterLesson, RequirementType,
+    Lesson, Character, CharacterLesson, RequirementType,
     Phrase, PhraseCharacter, PhraseLesson,
 )
 
@@ -43,16 +42,12 @@ class UnitImport(BaseModel):
     lessons: list[LessonImport] = []
 
 class TextbookImport(BaseModel):
-    publisher: str = "人教版"
     grade: int
     volume: int
-    name: str
     units: list[UnitImport] = []
 
 class FullImport(BaseModel):
     """Import an entire textbook with all units, lessons, characters, and phrases."""
-    subject_code: str = "chinese"
-    subject_name: str = "语文"
     textbook: TextbookImport
 
 class LessonDataImport(BaseModel):
@@ -60,16 +55,6 @@ class LessonDataImport(BaseModel):
     lesson_id: UUID
     characters: list[CharacterImport] = []
     phrases: list[PhraseImport] = []
-
-
-async def _get_or_create_subject(db: AsyncSession, code: str, name: str) -> Subject:
-    result = await db.exec(select(Subject).where(Subject.code == code))
-    subject = result.one_or_none()
-    if not subject:
-        subject = Subject(code=code, name=name)
-        db.add(subject)
-        await db.flush()
-    return subject
 
 
 async def _get_requirement_map(db: AsyncSession) -> dict[str, UUID]:
@@ -143,64 +128,19 @@ async def _import_characters_and_phrases(
 async def import_textbook(data: FullImport, db: AsyncSession = Depends(get_session)):
     """Import an entire textbook with all units, lessons, characters, and phrases.
 
-    Example:
-    ```json
-    {
-      "subject_code": "chinese",
-      "subject_name": "语文",
-      "textbook": {
-        "publisher": "人教版",
-        "grade": 1,
-        "volume": 1,
-        "name": "一年级上册",
-        "units": [
-          {
-            "unit_number": 1,
-            "title": "第一单元",
-            "lessons": [
-              {
-                "lesson_number": 1,
-                "title": "天地人",
-                "characters": [
-                  {"character": "天", "pinyin": "tiān", "requirement": "recognize"},
-                  {"character": "地", "pinyin": "dì", "requirement": "recognize"},
-                  {"character": "人", "pinyin": "rén", "requirement": "write"}
-                ],
-                "phrases": [
-                  {"phrase": "天地", "pinyin": "tiān dì"},
-                  {"phrase": "人民", "pinyin": "rén mín", "meaning": "people"}
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    }
-    ```
     """
     req_map = await _get_requirement_map(db)
-    subject = await _get_or_create_subject(db, data.subject_code, data.subject_name)
-
     tb = data.textbook
-    textbook = Textbook(
-        subject_id=subject.id, publisher=tb.publisher,
-        grade=tb.grade, volume=tb.volume, name=tb.name,
-    )
-    db.add(textbook)
-    await db.flush()
 
-    totals = {"units": 0, "lessons": 0, "characters": 0, "character_lessons": 0,
+    totals = {"lessons": 0, "characters": 0, "character_lessons": 0,
               "phrases": 0, "phrase_lessons": 0}
 
     for unit_data in tb.units:
-        unit = Unit(textbook_id=textbook.id, unit_number=unit_data.unit_number, title=unit_data.title)
-        db.add(unit)
-        await db.flush()
-        totals["units"] += 1
-
         for lesson_data in unit_data.lessons:
             lesson = Lesson(
-                unit_id=unit.id, lesson_number=lesson_data.lesson_number,
+                grade=tb.grade, volume=tb.volume,
+                unit_number=unit_data.unit_number, unit_title=unit_data.title,
+                lesson_number=lesson_data.lesson_number,
                 title=lesson_data.title, page_start=lesson_data.page_start,
                 page_end=lesson_data.page_end,
             )
@@ -215,12 +155,7 @@ async def import_textbook(data: FullImport, db: AsyncSession = Depends(get_sessi
                 totals[k] += v
 
     await db.commit()
-    return {
-        "status": "ok",
-        "textbook_id": str(textbook.id),
-        "subject_id": str(subject.id),
-        **totals,
-    }
+    return {"status": "ok", **totals}
 
 
 @router.post("/import/lesson")

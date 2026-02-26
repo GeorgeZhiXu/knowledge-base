@@ -9,7 +9,7 @@ from app.core.database import get_session
 from app.models.models import (
     Character, CharacterLesson, RequirementType,
     Phrase, PhraseCharacter, PhraseLesson,
-    Lesson, Unit,
+    Lesson,
 )
 
 router = APIRouter()
@@ -192,40 +192,38 @@ async def add_phrase_to_lesson(
 
 # --- Cumulative queries ---
 
-@router.get("/textbooks/{textbook_id}/characters")
+@router.get("/grades/{grade}/volumes/{volume}/characters")
 async def get_textbook_characters(
-    textbook_id: UUID,
+    grade: int,
+    volume: int,
     up_to_lesson: int | None = None,
     db: AsyncSession = Depends(get_session),
 ):
     """Get all characters in a textbook, optionally up to a lesson number."""
     stmt = (
-        select(Character, CharacterLesson, RequirementType, Lesson, Unit)
+        select(Character, CharacterLesson, RequirementType, Lesson)
         .join(CharacterLesson, Character.character == CharacterLesson.character)
         .join(RequirementType, CharacterLesson.requirement_id == RequirementType.id)
         .join(Lesson, CharacterLesson.lesson_id == Lesson.id)
-        .join(Unit, Lesson.unit_id == Unit.id)
-        .where(Unit.textbook_id == textbook_id)
-        .order_by(Unit.unit_number, Lesson.lesson_number, CharacterLesson.sort_order)
+        .where(Lesson.grade == grade, Lesson.volume == volume)
+        .order_by(Lesson.unit_number, Lesson.lesson_number, CharacterLesson.sort_order)
     )
     if up_to_lesson is not None:
-        # Include all lessons where (unit_number, lesson_number) <= target
-        # Simple approach: filter by a global lesson sequence
         stmt = stmt.where(
-            (Unit.unit_number * 100 + Lesson.lesson_number) <= up_to_lesson
+            (Lesson.unit_number * 100 + Lesson.lesson_number) <= up_to_lesson
         )
     result = await db.exec(stmt)
     seen = set()
     characters = []
-    for c, cl, rt, l, u in result.all():
+    for c, cl, rt, l in result.all():
         key = c.character
         characters.append({
             **c.model_dump(),
             "requirement": rt.code,
             "requirement_label": rt.label,
             "lesson_title": l.title,
-            "unit_title": u.title,
-            "unit_number": u.unit_number,
+            "unit_title": l.unit_title,
+            "unit_number": l.unit_number,
             "lesson_number": l.lesson_number,
             "first_appearance": key not in seen,
         })
@@ -233,29 +231,29 @@ async def get_textbook_characters(
     return characters
 
 
-@router.get("/textbooks/{textbook_id}/phrases")
+@router.get("/grades/{grade}/volumes/{volume}/phrases")
 async def get_textbook_phrases(
-    textbook_id: UUID,
+    grade: int,
+    volume: int,
     up_to_lesson: int | None = None,
     db: AsyncSession = Depends(get_session),
 ):
     """Get all phrases in a textbook, optionally up to a lesson number."""
     stmt = (
-        select(Phrase, PhraseLesson, Lesson, Unit)
+        select(Phrase, PhraseLesson, Lesson)
         .join(PhraseLesson, Phrase.id == PhraseLesson.phrase_id)
         .join(Lesson, PhraseLesson.lesson_id == Lesson.id)
-        .join(Unit, Lesson.unit_id == Unit.id)
-        .where(Unit.textbook_id == textbook_id)
-        .order_by(Unit.unit_number, Lesson.lesson_number, PhraseLesson.sort_order)
+        .where(Lesson.grade == grade, Lesson.volume == volume)
+        .order_by(Lesson.unit_number, Lesson.lesson_number, PhraseLesson.sort_order)
     )
     if up_to_lesson is not None:
         stmt = stmt.where(
-            (Unit.unit_number * 100 + Lesson.lesson_number) <= up_to_lesson
+            (Lesson.unit_number * 100 + Lesson.lesson_number) <= up_to_lesson
         )
     result = await db.exec(stmt)
     return [
-        {**p.model_dump(), "lesson_title": l.title, "unit_title": u.title}
-        for p, pl, l, u in result.all()
+        {**p.model_dump(), "lesson_title": l.title, "unit_title": l.unit_title}
+        for p, pl, l in result.all()
     ]
 
 

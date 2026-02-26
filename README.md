@@ -30,47 +30,18 @@ mkdir -p data
 
 ## Database Schema
 
-### Curriculum Hierarchy (generic)
+### Lessons
 
-```
-subjects → textbooks → units → lessons
-```
-
-**subjects**
+**lessons** (flat structure — grade/volume/unit info stored directly)
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | UUID | PK |
-| code | str | unique — `"chinese"`, `"math"` |
-| name | str | `"语文"`, `"数学"` |
-
-**textbooks**
-
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID | PK |
-| subject_id | UUID | FK → subjects |
-| publisher | str | `"人教版"` |
-| grade | int | 1–12 |
+| grade | int | 1–6 |
 | volume | int | 1=上册, 2=下册 |
-| name | str | `"一年级上册"` |
-
-**units**
-
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID | PK |
-| textbook_id | UUID | FK → textbooks |
-| unit_number | int | sequential |
-| title | str | `"第一单元"` |
-
-**lessons**
-
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID | PK |
-| unit_id | UUID | FK → units |
-| lesson_number | int | sequential |
+| unit_number | int | unit within textbook |
+| unit_title | str | `"课文（一）"`, `"识字"` |
+| lesson_number | int | lesson within unit |
 | title | str | `"天地人"` |
 | page_start | int | optional |
 | page_end | int | optional |
