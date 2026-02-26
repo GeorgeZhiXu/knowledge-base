@@ -95,11 +95,11 @@ async def _import_characters_and_phrases(
 
         existing_pl = await db.exec(
             select(PhraseLesson)
-            .where(PhraseLesson.phrase_id == phrase.id)
+            .where(PhraseLesson.phrase == phrase.phrase)
             .where(PhraseLesson.lesson_id == lesson_id)
         )
         if not existing_pl.one_or_none():
-            db.add(PhraseLesson(phrase_id=phrase.id, lesson_id=lesson_id, sort_order=i))
+            db.add(PhraseLesson(phrase=phrase.phrase, lesson_id=lesson_id, sort_order=i))
             stats["phrase_lessons"] += 1
 
     return stats

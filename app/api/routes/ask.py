@@ -30,10 +30,10 @@ characters (character TEXT(1) PK, pinyin TEXT, standard_level INT, cumulative_pe
 character_lessons (character TEXT(1) FK→characters, lesson_id UUID FK→lessons, requirement TEXT, sort_order INT)
   -- PK: (character, lesson_id, requirement). requirement: 'recognize' (认识) or 'write' (会写)
 
-phrases (id UUID PK, phrase TEXT UNIQUE, pinyin TEXT, meaning TEXT, notes TEXT)
+phrases (phrase TEXT PK, pinyin TEXT, meaning TEXT, frequency_rank INT, notes TEXT)
 
-phrase_lessons (phrase_id UUID FK→phrases, lesson_id UUID FK→lessons, sort_order INT)
-  -- PK: (phrase_id, lesson_id)
+phrase_lessons (phrase TEXT FK→phrases, lesson_id UUID FK→lessons, sort_order INT)
+  -- PK: (phrase, lesson_id)
 
 test_sessions (id UUID PK, learner TEXT, lesson_id UUID FK→lessons nullable, title TEXT, tested_at DATETIME, notes TEXT)
   -- a quiz/practice session. learner is a username string (e.g. 'Ada')

@@ -44,8 +44,7 @@ class CharacterLesson(SQLModel, table=True):
 
 class Phrase(SQLModel, table=True):
     __tablename__ = "phrases"
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    phrase: str = Field(unique=True, max_length=100, index=True)
+    phrase: str = Field(primary_key=True, max_length=100)
     pinyin: str = Field(max_length=200, default="")
     meaning: Optional[str] = Field(default=None, max_length=500)
     frequency_rank: Optional[int] = Field(default=None, index=True)
@@ -55,7 +54,7 @@ class Phrase(SQLModel, table=True):
 
 class PhraseLesson(SQLModel, table=True):
     __tablename__ = "phrase_lessons"
-    phrase_id: UUID = Field(foreign_key="phrases.id", primary_key=True)
+    phrase: str = Field(foreign_key="phrases.phrase", primary_key=True)
     lesson_id: UUID = Field(foreign_key="lessons.id", primary_key=True)
     sort_order: int = Field(default=0)
 

@@ -56,7 +56,7 @@ async def get_character(char: str, db: AsyncSession = Depends(get_session)):
     phrase_result = await db.exec(
         select(Phrase).where(col(Phrase.phrase).contains(char)).order_by(Phrase.phrase)
     )
-    phrases = [{"id": str(p.id), "phrase": p.phrase, "pinyin": p.pinyin}
+    phrases = [{"phrase": p.phrase, "pinyin": p.pinyin}
                for p in phrase_result.all()]
 
     return {
@@ -125,7 +125,7 @@ async def add_character_to_lesson(
 async def get_lesson_phrases(lesson_id: UUID, db: AsyncSession = Depends(get_session)):
     result = await db.exec(
         select(Phrase)
-        .join(PhraseLesson, Phrase.id == PhraseLesson.phrase_id)
+        .join(PhraseLesson, Phrase.phrase == PhraseLesson.phrase)
         .where(PhraseLesson.lesson_id == lesson_id)
         .order_by(PhraseLesson.sort_order)
     )
@@ -137,7 +137,7 @@ async def add_phrase_to_lesson(
     lesson_id: UUID, data: dict, db: AsyncSession = Depends(get_session)
 ):
     pl = PhraseLesson(
-        phrase_id=data["phrase_id"],
+        phrase=data["phrase"],
         lesson_id=lesson_id,
         sort_order=data.get("sort_order", 0),
     )
@@ -197,7 +197,7 @@ async def get_textbook_phrases(
     """Get all phrases in a textbook, optionally up to a lesson number."""
     stmt = (
         select(Phrase, PhraseLesson, Lesson)
-        .join(PhraseLesson, Phrase.id == PhraseLesson.phrase_id)
+        .join(PhraseLesson, Phrase.phrase == PhraseLesson.phrase)
         .join(Lesson, PhraseLesson.lesson_id == Lesson.id)
         .where(Lesson.grade == grade, Lesson.volume == volume)
         .order_by(Lesson.unit_number, Lesson.lesson_number, PhraseLesson.sort_order)
@@ -227,13 +227,13 @@ async def delete_character(char: str, db: AsyncSession = Depends(get_session)):
     await db.delete(character)
     await db.commit()
 
-@router.delete("/phrases/{phrase_id}", status_code=204)
-async def delete_phrase(phrase_id: UUID, db: AsyncSession = Depends(get_session)):
-    result = await db.exec(select(Phrase).where(Phrase.id == phrase_id))
+@router.delete("/phrases/{phrase_text}", status_code=204)
+async def delete_phrase(phrase_text: str, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(Phrase).where(Phrase.phrase == phrase_text))
     phrase = result.one_or_none()
     if not phrase:
         raise HTTPException(status_code=404, detail="Phrase not found")
-    pls = await db.exec(select(PhraseLesson).where(PhraseLesson.phrase_id == phrase_id))
+    pls = await db.exec(select(PhraseLesson).where(PhraseLesson.phrase == phrase_text))
     for r in pls.all():
         await db.delete(r)
     await db.delete(phrase)
