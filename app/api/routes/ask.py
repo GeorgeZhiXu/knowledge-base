@@ -35,21 +35,18 @@ phrases (id UUID PK, phrase TEXT UNIQUE, pinyin TEXT, meaning TEXT, notes TEXT)
 phrase_lessons (phrase_id UUID FK→phrases, lesson_id UUID FK→lessons, sort_order INT)
   -- PK: (phrase_id, lesson_id)
 
-learners (id UUID PK, name TEXT UNIQUE, created_at DATETIME)
-  -- e.g. name='Ada'
+test_sessions (id UUID PK, learner TEXT, lesson_id UUID FK→lessons nullable, title TEXT, tested_at DATETIME, notes TEXT)
+  -- a quiz/practice session. learner is a username string (e.g. 'Ada')
 
-test_sessions (id UUID PK, learner_id UUID FK→learners, lesson_id UUID FK→lessons nullable, title TEXT, tested_at DATETIME, notes TEXT)
-  -- a quiz/practice session for a learner
-
-test_results (id UUID PK, session_id UUID FK→test_sessions, learner_id UUID FK→learners, character TEXT(1) FK→characters, skill TEXT, passed BOOL, tested_at DATETIME)
+test_results (learner TEXT, session_id UUID FK→test_sessions nullable, character TEXT(1) FK→characters, skill TEXT, passed BOOL, tested_at DATETIME)
   -- skill: 'read' or 'write'. passed: 1=mastered, 0=needs practice
-  -- To find a learner's failed characters: JOIN learners ON learners.id = test_results.learner_id WHERE learners.name = '...' AND passed = 0
+  -- To find a learner's failed characters: WHERE learner = 'Ada' AND passed = 0
 
 Key relationships:
 - characters ←→ character_lessons ←→ lessons (which characters in which lessons)
 - To find phrases containing a character: WHERE INSTR(phrase, character) > 0
 - phrases ←→ phrase_lessons ←→ lessons (which phrases in which lessons)
-- learners ←→ test_results ←→ characters (learner test history per character)
+- test_results links learner (by username) to characters with pass/fail history
 
 To get all characters for a textbook: JOIN character_lessons ON lesson_id, filter lessons by grade AND volume.
 To get characters up to a certain lesson: additionally filter by unit_number and lesson_number.
@@ -63,16 +60,14 @@ Common query patterns:
 2. "Characters [learner] failed":
    SELECT DISTINCT c.character, c.pinyin FROM characters c
    JOIN test_results tr ON tr.character = c.character
-   JOIN learners l ON l.id = tr.learner_id
-   WHERE l.name = '...' AND tr.passed = 0
+   WHERE tr.learner = '...' AND tr.passed = 0
 
 3. "Top N common characters that [learner] failed":
    -- IMPORTANT: use a subquery to define the top-N pool first, then filter by learner results.
    -- Do NOT just LIMIT the final output — that limits result rows, not the character pool.
    SELECT DISTINCT c.character, c.pinyin, c.cumulative_percent FROM characters c
    JOIN test_results tr ON tr.character = c.character
-   JOIN learners l ON l.id = tr.learner_id
-   WHERE l.name = '...' AND tr.passed = 0
+   WHERE tr.learner = '...' AND tr.passed = 0
      AND c.character IN (
        SELECT character FROM characters WHERE cumulative_percent IS NOT NULL
        ORDER BY cumulative_percent ASC LIMIT N
@@ -98,7 +93,7 @@ Rules:
 - Lessons contain grade/volume directly. No need for joins to get textbook info. Filter by grade AND volume.
 - When filtering by frequency/commonness, ALWAYS add "cumulative_percent IS NOT NULL" to exclude characters without frequency data.
 - Lower cumulative_percent = more common. "Top N" or "most common N" means ORDER BY cumulative_percent ASC LIMIT N.
-- When the user mentions a learner by name (e.g. "Ada"), always JOIN learners table on name, never assume the ID.
+- When the user mentions a learner by name (e.g. "Ada"), filter test_results directly: WHERE learner = 'Ada'. No JOIN needed.
 - Use standard_level for broad filtering (1=常用, 2=次常用, 3=rare). Use cumulative_percent for precise ranking.
 """
 

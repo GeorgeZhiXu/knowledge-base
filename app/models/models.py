@@ -62,17 +62,10 @@ class PhraseLesson(SQLModel, table=True):
 
 # --- Learner activity tracking ---
 
-class Learner(SQLModel, table=True):
-    __tablename__ = "learners"
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    name: str = Field(max_length=100, unique=True, index=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-
 class TestSession(SQLModel, table=True):
     __tablename__ = "test_sessions"
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    learner_id: UUID = Field(foreign_key="learners.id", index=True)
+    learner: str = Field(max_length=100, index=True)  # username from auth system
     lesson_id: Optional[UUID] = Field(default=None, foreign_key="lessons.id")
     title: Optional[str] = Field(default=None, max_length=200)
     tested_at: datetime = Field(default_factory=datetime.utcnow)
@@ -82,8 +75,8 @@ class TestSession(SQLModel, table=True):
 class TestResult(SQLModel, table=True):
     __tablename__ = "test_results"
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    session_id: UUID = Field(foreign_key="test_sessions.id", index=True)
-    learner_id: UUID = Field(foreign_key="learners.id", index=True)
+    learner: str = Field(max_length=100, index=True)  # username from auth system
+    session_id: Optional[UUID] = Field(default=None, foreign_key="test_sessions.id")
     character: str = Field(foreign_key="characters.character", max_length=1, index=True)
     skill: str = Field(max_length=20)  # "read" or "write"
     passed: bool = Field(default=False)

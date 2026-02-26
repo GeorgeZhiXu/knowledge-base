@@ -11,15 +11,12 @@ from sqlalchemy import func
 from sqlmodel import select
 
 from app.core.database import get_session
-from app.models.models import Learner, TestSession, TestResult
+from app.models.models import TestSession, TestResult
 
 router = APIRouter()
 
 
 # --- Request schemas ---
-
-class LearnerCreate(BaseModel):
-    name: str
 
 class TestResultEntry(BaseModel):
     character: str
@@ -27,68 +24,11 @@ class TestResultEntry(BaseModel):
     passed: bool
 
 class TestSessionCreate(BaseModel):
-    learner_id: UUID
+    learner: str  # username
     lesson_id: Optional[UUID] = None
     title: Optional[str] = None
     notes: Optional[str] = None
     results: list[TestResultEntry] = []
-
-
-# --- Learners ---
-
-@router.get("/learners")
-async def list_learners(db: AsyncSession = Depends(get_session)):
-    result = await db.exec(select(Learner).order_by(Learner.name))
-    return result.all()
-
-@router.post("/learners", status_code=201)
-async def create_learner(data: LearnerCreate, db: AsyncSession = Depends(get_session)):
-    # Return existing learner if name already exists
-    result = await db.exec(select(Learner).where(Learner.name == data.name))
-    existing = result.first()
-    if existing:
-        return existing
-    learner = Learner(name=data.name)
-    db.add(learner)
-    await db.commit()
-    await db.refresh(learner)
-    return learner
-
-@router.get("/learners/{learner_id}")
-async def get_learner(learner_id: UUID, db: AsyncSession = Depends(get_session)):
-    result = await db.exec(select(Learner).where(Learner.id == learner_id))
-    learner = result.one_or_none()
-    if not learner:
-        raise HTTPException(status_code=404, detail="Learner not found")
-    return learner
-
-@router.put("/learners/{learner_id}")
-async def update_learner(learner_id: UUID, data: LearnerCreate, db: AsyncSession = Depends(get_session)):
-    result = await db.exec(select(Learner).where(Learner.id == learner_id))
-    learner = result.one_or_none()
-    if not learner:
-        raise HTTPException(status_code=404, detail="Learner not found")
-    learner.name = data.name
-    db.add(learner)
-    await db.commit()
-    await db.refresh(learner)
-    return learner
-
-@router.delete("/learners/{learner_id}", status_code=204)
-async def delete_learner(learner_id: UUID, db: AsyncSession = Depends(get_session)):
-    result = await db.exec(select(Learner).where(Learner.id == learner_id))
-    learner = result.one_or_none()
-    if not learner:
-        raise HTTPException(status_code=404, detail="Learner not found")
-    # Delete all test results and sessions for this learner
-    results = await db.exec(select(TestResult).where(TestResult.learner_id == learner_id))
-    for r in results.all():
-        await db.delete(r)
-    sessions = await db.exec(select(TestSession).where(TestSession.learner_id == learner_id))
-    for s in sessions.all():
-        await db.delete(s)
-    await db.delete(learner)
-    await db.commit()
 
 
 # --- Test sessions ---
@@ -96,14 +36,9 @@ async def delete_learner(learner_id: UUID, db: AsyncSession = Depends(get_sessio
 @router.post("/test-sessions", status_code=201)
 async def create_test_session(data: TestSessionCreate, db: AsyncSession = Depends(get_session)):
     """Create a test session with batch results."""
-    # Verify learner exists
-    result = await db.exec(select(Learner).where(Learner.id == data.learner_id))
-    if not result.one_or_none():
-        raise HTTPException(status_code=404, detail="Learner not found")
-
     now = datetime.utcnow()
     session = TestSession(
-        learner_id=data.learner_id,
+        learner=data.learner,
         lesson_id=data.lesson_id,
         title=data.title,
         notes=data.notes,
@@ -114,8 +49,8 @@ async def create_test_session(data: TestSessionCreate, db: AsyncSession = Depend
 
     for entry in data.results:
         tr = TestResult(
+            learner=data.learner,
             session_id=session.id,
-            learner_id=data.learner_id,
             character=entry.character,
             skill=entry.skill,
             passed=entry.passed,
@@ -127,7 +62,7 @@ async def create_test_session(data: TestSessionCreate, db: AsyncSession = Depend
     await db.refresh(session)
     return {
         "session_id": str(session.id),
-        "learner_id": str(session.learner_id),
+        "learner": session.learner,
         "title": session.title,
         "tested_at": session.tested_at.isoformat(),
         "results_count": len(data.results),
@@ -139,72 +74,43 @@ async def delete_test_session(session_id: UUID, db: AsyncSession = Depends(get_s
     session = result.one_or_none()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    # Delete all results in this session
     results = await db.exec(select(TestResult).where(TestResult.session_id == session_id))
     for r in results.all():
         await db.delete(r)
     await db.delete(session)
     await db.commit()
 
-@router.get("/learners/{learner_id}/sessions")
-async def list_sessions(learner_id: UUID, db: AsyncSession = Depends(get_session)):
+@router.get("/learners/{learner}/sessions")
+async def list_sessions(learner: str, db: AsyncSession = Depends(get_session)):
     result = await db.exec(
         select(TestSession)
-        .where(TestSession.learner_id == learner_id)
+        .where(TestSession.learner == learner)
         .order_by(TestSession.tested_at.desc())
     )
-    sessions = result.all()
-    output = []
-    for s in sessions:
-        count_result = await db.exec(
-            select(func.count(TestResult.id)).where(TestResult.session_id == s.id)
-        )
-        count = count_result.one()
-        passed_result = await db.exec(
-            select(func.count(TestResult.id))
-            .where(TestResult.session_id == s.id)
-            .where(TestResult.passed == True)
-        )
-        passed = passed_result.one()
-        output.append({
+    return [
+        {
             "id": str(s.id),
             "title": s.title,
             "tested_at": s.tested_at.isoformat(),
-            "total": count,
-            "passed": passed,
             "notes": s.notes,
-        })
-    return output
+        }
+        for s in result.all()
+    ]
 
 
 # --- Progress ---
 
-@router.get("/learners/{learner_id}/progress")
-async def get_progress(learner_id: UUID, db: AsyncSession = Depends(get_session)):
+@router.get("/learners/{learner}/progress")
+async def get_progress(learner: str, db: AsyncSession = Depends(get_session)):
     """Overall mastery summary for a learner."""
-    # Total unique characters tested
-    total_result = await db.exec(
-        select(func.count(func.distinct(TestResult.character)))
-        .where(TestResult.learner_id == learner_id)
-    )
-    total_tested = total_result.one()
-
-    # Characters where latest read result is passed
-    # Use a subquery to get latest result per character+skill
-    for skill in ["read", "write"]:
-        pass  # We'll compute below
-
-    # Get all results, group by character+skill, take latest
     all_results = await db.exec(
         select(TestResult)
-        .where(TestResult.learner_id == learner_id)
+        .where(TestResult.learner == learner)
         .order_by(TestResult.tested_at.desc())
     )
-    results = all_results.all()
 
-    # Compute latest status per character+skill
     latest = {}  # (character, skill) → passed
-    for r in results:
+    for r in all_results.all():
         key = (r.character, r.skill)
         if key not in latest:
             latest[key] = r.passed
@@ -214,23 +120,21 @@ async def get_progress(learner_id: UUID, db: AsyncSession = Depends(get_session)
     write_mastered = sum(1 for (ch, sk), p in latest.items() if sk == "write" and p)
     write_total = sum(1 for (ch, sk) in latest if sk == "write")
 
-    # Total sessions
     session_result = await db.exec(
-        select(func.count(TestSession.id)).where(TestSession.learner_id == learner_id)
+        select(func.count(TestSession.id)).where(TestSession.learner == learner)
     )
-    total_sessions = session_result.one()
 
     return {
-        "learner_id": str(learner_id),
-        "total_characters_tested": total_tested,
-        "total_sessions": total_sessions,
+        "learner": learner,
+        "total_characters_tested": len(set(ch for ch, sk in latest)),
+        "total_sessions": session_result.one(),
         "read": {"mastered": read_mastered, "total": read_total},
         "write": {"mastered": write_mastered, "total": write_total},
     }
 
-@router.get("/learners/{learner_id}/progress/characters")
+@router.get("/learners/{learner}/progress/characters")
 async def get_character_progress(
-    learner_id: UUID,
+    learner: str,
     skill: Optional[str] = None,
     status: Optional[str] = None,  # "passed" or "failed"
     db: AsyncSession = Depends(get_session),
@@ -238,17 +142,15 @@ async def get_character_progress(
     """Per-character latest status for a learner."""
     stmt = (
         select(TestResult)
-        .where(TestResult.learner_id == learner_id)
+        .where(TestResult.learner == learner)
         .order_by(TestResult.tested_at.desc())
     )
     if skill:
         stmt = stmt.where(TestResult.skill == skill)
     result = await db.exec(stmt)
-    all_results = result.all()
 
-    # Latest result per character+skill
     latest = {}
-    for r in all_results:
+    for r in result.all():
         key = (r.character, r.skill)
         if key not in latest:
             latest[key] = {
@@ -259,7 +161,6 @@ async def get_character_progress(
             }
 
     chars = list(latest.values())
-
     if status == "passed":
         chars = [c for c in chars if c["passed"]]
     elif status == "failed":
@@ -268,16 +169,16 @@ async def get_character_progress(
     chars.sort(key=lambda c: (c["character"], c["skill"]))
     return chars
 
-@router.get("/learners/{learner_id}/characters/{char}/history")
+@router.get("/learners/{learner}/characters/{char}/history")
 async def get_character_history(
-    learner_id: UUID,
+    learner: str,
     char: str,
     db: AsyncSession = Depends(get_session),
 ):
     """All test attempts for a specific character by a learner."""
     result = await db.exec(
         select(TestResult)
-        .where(TestResult.learner_id == learner_id)
+        .where(TestResult.learner == learner)
         .where(TestResult.character == char)
         .order_by(TestResult.tested_at.desc())
     )
@@ -286,7 +187,7 @@ async def get_character_history(
             "skill": r.skill,
             "passed": r.passed,
             "tested_at": r.tested_at.isoformat(),
-            "session_id": str(r.session_id),
+            "session_id": str(r.session_id) if r.session_id else None,
         }
         for r in result.all()
     ]
