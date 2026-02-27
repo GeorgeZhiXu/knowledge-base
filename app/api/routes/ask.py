@@ -20,63 +20,57 @@ lessons (id INTEGER PK AUTO, grade INT, volume INT, unit_number INT, unit_title 
   -- Filter by textbook: WHERE grade=4 AND volume=1
 
 
-characters (character TEXT(1) PK, pinyin TEXT, standard_level INT, cumulative_percent REAL)
+words (word TEXT PK, pinyin TEXT, meaning TEXT, standard_level INT, cumulative_percent REAL)
+  -- Unified table for both single characters (e.g. '人') and phrases (e.g. '人民')
+  -- Single characters: length(word) = 1. Phrases: length(word) > 1.
   -- standard_level: 《通用规范汉字表》level — 1=常用(top 3500), 2=次常用(3501-6500), 3=rare(6501+)
-  -- cumulative_percent: cumulative text coverage percentage. LOWER value = MORE common character.
-  --   e.g. 的=4.65%, 一=7.06%, 是=8.97% ... 99%+ are very rare characters.
-  --   IMPORTANT: many characters have NULL cumulative_percent. Always filter with "cumulative_percent IS NOT NULL" when querying by frequency.
-  --   "Top N most common characters" = ORDER BY cumulative_percent ASC LIMIT N (lowest % = most common)
+  -- cumulative_percent: cumulative text coverage. LOWER = MORE common.
+  --   IMPORTANT: many words have NULL cumulative_percent. Always filter with "cumulative_percent IS NOT NULL" when querying by frequency.
+  --   "Top N most common" = ORDER BY cumulative_percent ASC LIMIT N
 
-character_lessons (character TEXT(1) FK→characters, lesson_id INT FK→lessons, requirement TEXT, sort_order INT)
-  -- PK: (character, lesson_id, requirement). requirement: 'recognize' (认识) or 'write' (会写)
-
-phrases (phrase TEXT PK, pinyin TEXT, meaning TEXT, frequency_rank INT, notes TEXT)
-
-phrase_lessons (phrase TEXT FK→phrases, lesson_id INT FK→lessons, sort_order INT)
-  -- PK: (phrase, lesson_id)
+word_lessons (word TEXT FK→words, lesson_id INT FK→lessons, requirement TEXT, sort_order INT)
+  -- PK: (word, lesson_id, requirement). requirement: 'recognize' (认识) or 'write' (会写)
 
 test_sessions (id INTEGER PK AUTO, learner TEXT, lesson_id INT FK→lessons nullable, title TEXT, tested_at DATETIME, notes TEXT)
   -- a quiz/practice session. learner is a username string (e.g. 'Ada')
 
-test_results (id INTEGER PK AUTO, learner TEXT, session_id INT FK→test_sessions nullable, character TEXT(1) FK→characters, skill TEXT, passed BOOL, tested_at DATETIME)
+test_results (id INTEGER PK AUTO, learner TEXT, session_id INT FK→test_sessions nullable, word TEXT FK→words, skill TEXT, passed BOOL, tested_at DATETIME)
   -- skill: 'read' or 'write'. passed: 1=mastered, 0=needs practice
-  -- To find a learner's failed characters: WHERE learner = 'Ada' AND passed = 0
+  -- To find a learner's failed words: WHERE learner = 'Ada' AND passed = 0
 
 Key relationships:
-- characters ←→ character_lessons ←→ lessons (which characters in which lessons)
-- To find phrases containing a character: WHERE INSTR(phrase, character) > 0
-- phrases ←→ phrase_lessons ←→ lessons (which phrases in which lessons)
-- test_results links learner (by username) to characters with pass/fail history
+- words ←→ word_lessons ←→ lessons (which words in which lessons)
+- To find phrases containing a character: WHERE INSTR(word, '人') > 0 AND length(word) > 1
+- test_results links learner (by username) to words with pass/fail history
 
-To get all characters for a textbook: JOIN character_lessons ON lesson_id, filter lessons by grade AND volume.
-To get characters up to a certain lesson: additionally filter by unit_number and lesson_number.
+To get all words for a textbook: JOIN word_lessons ON lesson_id, filter lessons by grade AND volume.
+To get single characters only: add WHERE length(w.word) = 1.
+To get phrases only: add WHERE length(w.word) > 1.
 
 Common query patterns:
 
 1. "Top N most common characters":
-   SELECT character, pinyin, cumulative_percent FROM characters
-   WHERE cumulative_percent IS NOT NULL ORDER BY cumulative_percent ASC LIMIT N
+   SELECT word, pinyin, cumulative_percent FROM words
+   WHERE length(word) = 1 AND cumulative_percent IS NOT NULL ORDER BY cumulative_percent ASC LIMIT N
 
-2. "Characters [learner] failed":
-   SELECT DISTINCT c.character, c.pinyin FROM characters c
-   JOIN test_results tr ON tr.character = c.character
+2. "Words [learner] failed":
+   SELECT DISTINCT w.word, w.pinyin FROM words w
+   JOIN test_results tr ON tr.word = w.word
    WHERE tr.learner = '...' AND tr.passed = 0
 
 3. "Top N common characters that [learner] failed":
-   -- IMPORTANT: use a subquery to define the top-N pool first, then filter by learner results.
-   -- Do NOT just LIMIT the final output — that limits result rows, not the character pool.
-   SELECT DISTINCT c.character, c.pinyin, c.cumulative_percent FROM characters c
-   JOIN test_results tr ON tr.character = c.character
+   SELECT DISTINCT w.word, w.pinyin, w.cumulative_percent FROM words w
+   JOIN test_results tr ON tr.word = w.word
    WHERE tr.learner = '...' AND tr.passed = 0
-     AND c.character IN (
-       SELECT character FROM characters WHERE cumulative_percent IS NOT NULL
+     AND w.word IN (
+       SELECT word FROM words WHERE length(word) = 1 AND cumulative_percent IS NOT NULL
        ORDER BY cumulative_percent ASC LIMIT N
      )
-   ORDER BY c.cumulative_percent ASC
+   ORDER BY w.cumulative_percent ASC
 
 Important:
-- A character can have MULTIPLE test_results rows (tested many times). Always use DISTINCT or GROUP BY on character to avoid duplicates.
-- "Top N characters" means define the pool of N characters via subquery first, then apply other filters. The final result may be fewer than N rows.
+- A word can have MULTIPLE test_results rows (tested many times). Always use DISTINCT or GROUP BY on word to avoid duplicates.
+- "Top N" means define the pool via subquery first, then apply other filters. The final result may be fewer than N rows.
 """
 
 SYSTEM_PROMPT = f"""You are a SQL query generator for a Chinese language education knowledge base.
@@ -89,7 +83,7 @@ Rules:
 - Use SQLite syntax.
 - LIMIT results to 200 rows max.
 - Return ONLY the SQL query, no explanation, no markdown, no code fences. Just the raw SQL.
-- For Chinese character lookups, the character column is the primary key (single character like '人').
+- The words table contains both single characters ('人') and phrases ('人民'). Use length(word)=1 for characters only, length(word)>1 for phrases only.
 - Lessons contain grade/volume directly. No need for joins to get textbook info. Filter by grade AND volume.
 - When filtering by frequency/commonness, ALWAYS add "cumulative_percent IS NOT NULL" to exclude characters without frequency data.
 - Lower cumulative_percent = more common. "Top N" or "most common N" means ORDER BY cumulative_percent ASC LIMIT N.

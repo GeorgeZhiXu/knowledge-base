@@ -4,6 +4,10 @@ from typing import Optional
 from sqlmodel import Field, SQLModel
 
 
+# --- Requirement labels (not a DB table, just a mapping) ---
+REQUIREMENT_LABELS = {"recognize": "认识", "read": "会读", "write": "会写", "recite": "背诵"}
+
+
 # --- Curriculum ---
 
 class Lesson(SQLModel, table=True):
@@ -19,42 +23,22 @@ class Lesson(SQLModel, table=True):
     page_end: Optional[int] = None
 
 
-# --- Requirement labels (not a DB table, just a mapping) ---
-REQUIREMENT_LABELS = {"recognize": "认识", "read": "会读", "write": "会写", "recite": "背诵"}
+# --- Words (characters + phrases unified) ---
 
-
-# --- Chinese-specific tables ---
-
-class Character(SQLModel, table=True):
-    __tablename__ = "characters"
-    character: str = Field(primary_key=True, max_length=1)
-    pinyin: str = Field(max_length=50, default="")
-    standard_level: Optional[int] = Field(default=None)  # 《通用规范汉字表》: 1=常用(top 3500), 2=次常用(3501-6500), 3=rare(6501+)
+class Word(SQLModel, table=True):
+    __tablename__ = "words"
+    word: str = Field(primary_key=True, max_length=100)  # single char "人" or phrase "人民"
+    pinyin: str = Field(max_length=200, default="")
+    meaning: Optional[str] = Field(default=None, max_length=500)
+    standard_level: Optional[int] = Field(default=None)  # 《通用规范汉字表》: 1=常用, 2=次常用, 3=rare
     cumulative_percent: Optional[float] = Field(default=None)  # cumulative text coverage %
 
 
-class CharacterLesson(SQLModel, table=True):
-    __tablename__ = "character_lessons"
-    character: str = Field(foreign_key="characters.character", max_length=1, primary_key=True)
+class WordLesson(SQLModel, table=True):
+    __tablename__ = "word_lessons"
+    word: str = Field(foreign_key="words.word", primary_key=True)
     lesson_id: int = Field(foreign_key="lessons.id", primary_key=True)
     requirement: str = Field(max_length=20, primary_key=True)  # 'recognize' or 'write'
-    sort_order: int = Field(default=0)
-
-
-class Phrase(SQLModel, table=True):
-    __tablename__ = "phrases"
-    phrase: str = Field(primary_key=True, max_length=100)
-    pinyin: str = Field(max_length=200, default="")
-    meaning: Optional[str] = Field(default=None, max_length=500)
-    frequency_rank: Optional[int] = Field(default=None, index=True)
-    frequency_count: Optional[int] = Field(default=None)
-    notes: Optional[str] = Field(default=None, max_length=500)
-
-
-class PhraseLesson(SQLModel, table=True):
-    __tablename__ = "phrase_lessons"
-    phrase: str = Field(foreign_key="phrases.phrase", primary_key=True)
-    lesson_id: int = Field(foreign_key="lessons.id", primary_key=True)
     sort_order: int = Field(default=0)
 
 
@@ -75,7 +59,7 @@ class TestResult(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     learner: str = Field(max_length=100, index=True)
     session_id: Optional[int] = Field(default=None, foreign_key="test_sessions.id")
-    character: str = Field(foreign_key="characters.character", max_length=1, index=True)
+    word: str = Field(foreign_key="words.word", max_length=100, index=True)
     skill: str = Field(max_length=20)  # "read" or "write"
     passed: bool = Field(default=False)
     tested_at: datetime = Field(default_factory=datetime.utcnow)

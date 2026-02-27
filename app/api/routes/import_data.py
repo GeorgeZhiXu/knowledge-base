@@ -7,33 +7,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.core.database import get_session
-from app.models.models import (
-    Lesson, Character, CharacterLesson,
-    Phrase, PhraseLesson,
-)
+from app.models.models import Lesson, Word, WordLesson
 
 router = APIRouter()
 
 
 # --- Request schemas ---
 
-class CharacterImport(BaseModel):
-    character: str
+class WordImport(BaseModel):
+    word: str
     pinyin: str = ""
     requirement: str = "recognize"
-
-class PhraseImport(BaseModel):
-    phrase: str
-    pinyin: str = ""
-    meaning: Optional[str] = None
 
 class LessonImport(BaseModel):
     lesson_number: int
     title: str
     page_start: Optional[int] = None
     page_end: Optional[int] = None
-    characters: list[CharacterImport] = []
-    phrases: list[PhraseImport] = []
+    words: list[WordImport] = []
 
 class UnitImport(BaseModel):
     unit_number: int
@@ -46,73 +37,49 @@ class TextbookImport(BaseModel):
     units: list[UnitImport] = []
 
 class FullImport(BaseModel):
-    """Import an entire textbook with all units, lessons, characters, and phrases."""
+    """Import an entire textbook with all units, lessons, and words."""
     textbook: TextbookImport
 
 class LessonDataImport(BaseModel):
-    """Import characters and phrases for an existing lesson."""
+    """Import words for an existing lesson."""
     lesson_id: int
-    characters: list[CharacterImport] = []
-    phrases: list[PhraseImport] = []
+    words: list[WordImport] = []
 
 
-async def _import_characters_and_phrases(
+async def _import_words(
     db: AsyncSession,
     lesson_id: int,
-    characters: list[CharacterImport],
-    phrases: list[PhraseImport],
+    words: list[WordImport],
 ) -> dict:
-    stats = {"characters": 0, "character_lessons": 0, "phrases": 0, "phrase_lessons": 0}
+    stats = {"words": 0, "word_lessons": 0}
 
-    for i, ch in enumerate(characters):
-        existing = await db.exec(select(Character).where(Character.character == ch.character))
+    for i, w in enumerate(words):
+        existing = await db.exec(select(Word).where(Word.word == w.word))
         if not existing.one_or_none():
-            db.add(Character(character=ch.character, pinyin=ch.pinyin))
-            stats["characters"] += 1
+            db.add(Word(word=w.word, pinyin=w.pinyin))
+            stats["words"] += 1
 
-        existing_cl = await db.exec(
-            select(CharacterLesson)
-            .where(CharacterLesson.character == ch.character)
-            .where(CharacterLesson.lesson_id == lesson_id)
-            .where(CharacterLesson.requirement == ch.requirement)
+        existing_wl = await db.exec(
+            select(WordLesson)
+            .where(WordLesson.word == w.word)
+            .where(WordLesson.lesson_id == lesson_id)
+            .where(WordLesson.requirement == w.requirement)
         )
-        if not existing_cl.one_or_none():
-            db.add(CharacterLesson(
-                character=ch.character, lesson_id=lesson_id,
-                requirement=ch.requirement, sort_order=i,
+        if not existing_wl.one_or_none():
+            db.add(WordLesson(
+                word=w.word, lesson_id=lesson_id,
+                requirement=w.requirement, sort_order=i,
             ))
-            stats["character_lessons"] += 1
-
-    for i, ph in enumerate(phrases):
-        existing = await db.exec(select(Phrase).where(Phrase.phrase == ph.phrase))
-        phrase = existing.one_or_none()
-        if not phrase:
-            phrase = Phrase(phrase=ph.phrase, pinyin=ph.pinyin, meaning=ph.meaning)
-            db.add(phrase)
-            await db.flush()
-            stats["phrases"] += 1
-
-        existing_pl = await db.exec(
-            select(PhraseLesson)
-            .where(PhraseLesson.phrase == phrase.phrase)
-            .where(PhraseLesson.lesson_id == lesson_id)
-        )
-        if not existing_pl.one_or_none():
-            db.add(PhraseLesson(phrase=phrase.phrase, lesson_id=lesson_id, sort_order=i))
-            stats["phrase_lessons"] += 1
+            stats["word_lessons"] += 1
 
     return stats
 
 
 @router.post("/import/textbook")
 async def import_textbook(data: FullImport, db: AsyncSession = Depends(get_session)):
-    """Import an entire textbook with all units, lessons, characters, and phrases.
-
-    """
+    """Import an entire textbook with all units, lessons, and words."""
     tb = data.textbook
-
-    totals = {"lessons": 0, "characters": 0, "character_lessons": 0,
-              "phrases": 0, "phrase_lessons": 0}
+    totals = {"lessons": 0, "words": 0, "word_lessons": 0}
 
     for unit_data in tb.units:
         for lesson_data in unit_data.lessons:
@@ -127,9 +94,7 @@ async def import_textbook(data: FullImport, db: AsyncSession = Depends(get_sessi
             await db.flush()
             totals["lessons"] += 1
 
-            stats = await _import_characters_and_phrases(
-                db, lesson.id, lesson_data.characters, lesson_data.phrases,
-            )
+            stats = await _import_words(db, lesson.id, lesson_data.words)
             for k, v in stats.items():
                 totals[k] += v
 
@@ -139,82 +104,43 @@ async def import_textbook(data: FullImport, db: AsyncSession = Depends(get_sessi
 
 @router.post("/import/lesson")
 async def import_lesson_data(data: LessonDataImport, db: AsyncSession = Depends(get_session)):
-    """Import characters and phrases for an existing lesson."""
-    stats = await _import_characters_and_phrases(
-        db, data.lesson_id, data.characters, data.phrases,
-    )
+    """Import words for an existing lesson."""
+    stats = await _import_words(db, data.lesson_id, data.words)
     await db.commit()
     return {"status": "ok", **stats}
 
 
 class FrequencyEntry(BaseModel):
-    character: str
+    word: str
     pinyin: str = ""
-    standard_level: int = 1
+    standard_level: Optional[int] = None
     cumulative_percent: Optional[float] = None
 
 class FrequencyImport(BaseModel):
-    characters: list[FrequencyEntry]
+    words: list[FrequencyEntry]
 
 @router.post("/import/frequency")
 async def import_frequency_data(data: FrequencyImport, db: AsyncSession = Depends(get_session)):
-    """Import character standard levels. Creates new characters or updates existing ones."""
+    """Import word frequency data. Creates new words or updates existing ones."""
     created = 0
     updated = 0
-    for entry in data.characters:
-        result = await db.exec(
-            select(Character).where(Character.character == entry.character)
-        )
-        char = result.one_or_none()
-        if char:
-            char.standard_level = entry.standard_level
+    for entry in data.words:
+        result = await db.exec(select(Word).where(Word.word == entry.word))
+        word = result.one_or_none()
+        if word:
+            if entry.standard_level is not None:
+                word.standard_level = entry.standard_level
             if entry.cumulative_percent is not None:
-                char.cumulative_percent = entry.cumulative_percent
-            if entry.pinyin and not char.pinyin:
-                char.pinyin = entry.pinyin
-            db.add(char)
+                word.cumulative_percent = entry.cumulative_percent
+            if entry.pinyin and not word.pinyin:
+                word.pinyin = entry.pinyin
+            db.add(word)
             updated += 1
         else:
-            db.add(Character(
-                character=entry.character,
-                pinyin=entry.pinyin,
+            db.add(Word(
+                word=entry.word, pinyin=entry.pinyin,
                 standard_level=entry.standard_level,
                 cumulative_percent=entry.cumulative_percent,
-            ))
-            created += 1
-    await db.commit()
-    return {"status": "ok", "created": created, "updated": updated}
-
-
-class PhraseFrequencyEntry(BaseModel):
-    phrase: str
-    frequency_rank: int
-    frequency_count: Optional[int] = None
-
-class PhraseFrequencyImport(BaseModel):
-    phrases: list[PhraseFrequencyEntry]
-
-@router.post("/import/phrase-frequency")
-async def import_phrase_frequency(data: PhraseFrequencyImport, db: AsyncSession = Depends(get_session)):
-    """Import phrase frequency rankings. Creates new phrases or updates existing ones."""
-    created = 0
-    updated = 0
-    for entry in data.phrases:
-        result = await db.exec(
-            select(Phrase).where(Phrase.phrase == entry.phrase)
-        )
-        phrase = result.first()
-        if phrase:
-            phrase.frequency_rank = entry.frequency_rank
-            if entry.frequency_count is not None:
-                phrase.frequency_count = entry.frequency_count
-            db.add(phrase)
-            updated += 1
-        else:
-            db.add(Phrase(
-                phrase=entry.phrase,
-                frequency_rank=entry.frequency_rank,
-                frequency_count=entry.frequency_count,
             ))
             created += 1
     await db.commit()

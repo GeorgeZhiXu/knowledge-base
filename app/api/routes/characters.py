@@ -1,181 +1,135 @@
-"""Routes for characters, phrases, lesson content, and cumulative queries."""
+"""Routes for words (characters + phrases), lesson content, and cumulative queries."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, col
 
 from app.core.database import get_session
-from app.models.models import (
-    Character, CharacterLesson, REQUIREMENT_LABELS,
-    Phrase, PhraseLesson, Lesson,
-)
+from app.models.models import Word, WordLesson, REQUIREMENT_LABELS, Lesson
 
 router = APIRouter()
 
 
-# --- Characters ---
+# --- Words (characters + phrases) ---
 
-@router.get("/characters")
-async def list_characters(db: AsyncSession = Depends(get_session)):
-    result = await db.exec(select(Character).order_by(Character.character))
+@router.get("/words")
+async def list_words(q: str | None = None, db: AsyncSession = Depends(get_session)):
+    stmt = select(Word).order_by(Word.word)
+    if q:
+        stmt = stmt.where(col(Word.word).contains(q))
+    result = await db.exec(stmt)
     return result.all()
 
 
-@router.post("/characters", status_code=201)
-async def create_character(data: dict, db: AsyncSession = Depends(get_session)):
-    char = Character(**data)
-    db.add(char)
+@router.post("/words", status_code=201)
+async def create_word(data: dict, db: AsyncSession = Depends(get_session)):
+    word = Word(**data)
+    db.add(word)
     await db.commit()
-    await db.refresh(char)
-    return char
+    await db.refresh(word)
+    return word
 
 
-@router.get("/characters/{char}")
-async def get_character(char: str, db: AsyncSession = Depends(get_session)):
-    result = await db.exec(select(Character).where(Character.character == char))
-    character = result.one_or_none()
-    if not character:
-        raise HTTPException(status_code=404, detail="Character not found")
+@router.get("/words/{word}")
+async def get_word(word: str, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(Word).where(Word.word == word))
+    w = result.one_or_none()
+    if not w:
+        raise HTTPException(status_code=404, detail="Word not found")
 
-    # Get all lessons this character appears in
-    cl_result = await db.exec(
-        select(CharacterLesson, Lesson)
-        .join(Lesson, CharacterLesson.lesson_id == Lesson.id)
-        .where(CharacterLesson.character == char)
-        .order_by(CharacterLesson.sort_order)
+    # Get all lessons this word appears in
+    wl_result = await db.exec(
+        select(WordLesson, Lesson)
+        .join(Lesson, WordLesson.lesson_id == Lesson.id)
+        .where(WordLesson.word == word)
+        .order_by(Lesson.grade, Lesson.volume, WordLesson.sort_order)
     )
     lessons = [
-        {"lesson_id": str(cl.lesson_id), "lesson_title": l.title,
-         "requirement": cl.requirement,
-         "requirement_label": REQUIREMENT_LABELS.get(cl.requirement, cl.requirement)}
-        for cl, l in cl_result.all()
+        {"lesson_id": wl.lesson_id, "lesson_title": l.title,
+         "grade": l.grade, "volume": l.volume,
+         "requirement": wl.requirement,
+         "requirement_label": REQUIREMENT_LABELS.get(wl.requirement, wl.requirement)}
+        for wl, l in wl_result.all()
     ]
 
-    # Get phrases containing this character (derived from phrase text)
-    phrase_result = await db.exec(
-        select(Phrase).where(col(Phrase.phrase).contains(char)).order_by(Phrase.phrase)
-    )
-    phrases = [{"phrase": p.phrase, "pinyin": p.pinyin}
-               for p in phrase_result.all()]
+    # For single characters, find phrases containing it
+    phrases = []
+    if len(word) == 1:
+        phrase_result = await db.exec(
+            select(Word).where(col(Word.word).contains(word))
+            .where(Word.word != word).order_by(Word.word).limit(50)
+        )
+        phrases = [{"word": p.word, "pinyin": p.pinyin} for p in phrase_result.all()]
 
-    return {
-        **character.model_dump(),
-        "lessons": lessons,
-        "phrases": phrases,
-    }
-
-
-# --- Phrases ---
-
-@router.get("/phrases")
-async def list_phrases(db: AsyncSession = Depends(get_session)):
-    result = await db.exec(select(Phrase).order_by(Phrase.phrase))
-    return result.all()
-
-
-@router.post("/phrases", status_code=201)
-async def create_phrase(data: dict, db: AsyncSession = Depends(get_session)):
-    phrase = Phrase(
-        phrase=data["phrase"],
-        pinyin=data.get("pinyin", ""),
-        meaning=data.get("meaning"),
-        notes=data.get("notes"),
-    )
-    db.add(phrase)
-    await db.commit()
-    await db.refresh(phrase)
-    return phrase
+    return {**w.model_dump(), "lessons": lessons, "phrases": phrases}
 
 
 # --- Lesson content ---
 
-@router.get("/lessons/{lesson_id}/characters")
-async def get_lesson_characters(lesson_id: int, db: AsyncSession = Depends(get_session)):
+@router.get("/lessons/{lesson_id}/words")
+async def get_lesson_words(lesson_id: int, db: AsyncSession = Depends(get_session)):
     result = await db.exec(
-        select(CharacterLesson, Character)
-        .join(Character, CharacterLesson.character == Character.character)
-        .where(CharacterLesson.lesson_id == lesson_id)
-        .order_by(CharacterLesson.sort_order)
+        select(WordLesson, Word)
+        .join(Word, WordLesson.word == Word.word)
+        .where(WordLesson.lesson_id == lesson_id)
+        .order_by(WordLesson.requirement, WordLesson.sort_order)
     )
     return [
-        {**c.model_dump(), "requirement": cl.requirement,
-         "requirement_label": REQUIREMENT_LABELS.get(cl.requirement, cl.requirement)}
-        for cl, c in result.all()
+        {**w.model_dump(), "requirement": wl.requirement,
+         "requirement_label": REQUIREMENT_LABELS.get(wl.requirement, wl.requirement)}
+        for wl, w in result.all()
     ]
 
 
-@router.post("/lessons/{lesson_id}/characters", status_code=201)
-async def add_character_to_lesson(
+@router.post("/lessons/{lesson_id}/words", status_code=201)
+async def add_word_to_lesson(
     lesson_id: int, data: dict, db: AsyncSession = Depends(get_session)
 ):
-    cl = CharacterLesson(
-        character=data["character"],
+    wl = WordLesson(
+        word=data["word"],
         lesson_id=lesson_id,
         requirement=data["requirement"],
         sort_order=data.get("sort_order", 0),
     )
-    db.add(cl)
+    db.add(wl)
     await db.commit()
-    await db.refresh(cl)
-    return cl
-
-
-@router.get("/lessons/{lesson_id}/phrases")
-async def get_lesson_phrases(lesson_id: int, db: AsyncSession = Depends(get_session)):
-    result = await db.exec(
-        select(Phrase)
-        .join(PhraseLesson, Phrase.phrase == PhraseLesson.phrase)
-        .where(PhraseLesson.lesson_id == lesson_id)
-        .order_by(PhraseLesson.sort_order)
-    )
-    return result.all()
-
-
-@router.post("/lessons/{lesson_id}/phrases", status_code=201)
-async def add_phrase_to_lesson(
-    lesson_id: int, data: dict, db: AsyncSession = Depends(get_session)
-):
-    pl = PhraseLesson(
-        phrase=data["phrase"],
-        lesson_id=lesson_id,
-        sort_order=data.get("sort_order", 0),
-    )
-    db.add(pl)
-    await db.commit()
-    await db.refresh(pl)
-    return pl
+    await db.refresh(wl)
+    return wl
 
 
 # --- Cumulative queries ---
 
-@router.get("/grades/{grade}/volumes/{volume}/characters")
-async def get_textbook_characters(
+@router.get("/grades/{grade}/volumes/{volume}/words")
+async def get_textbook_words(
     grade: int,
     volume: int,
+    requirement: str | None = None,
     up_to_lesson: int | None = None,
     db: AsyncSession = Depends(get_session),
 ):
-    """Get all characters in a textbook, optionally up to a lesson number."""
+    """Get all words in a textbook, optionally filtered by requirement and up to a lesson."""
     stmt = (
-        select(Character, CharacterLesson, Lesson)
-        .join(CharacterLesson, Character.character == CharacterLesson.character)
-        .join(Lesson, CharacterLesson.lesson_id == Lesson.id)
+        select(Word, WordLesson, Lesson)
+        .join(WordLesson, Word.word == WordLesson.word)
+        .join(Lesson, WordLesson.lesson_id == Lesson.id)
         .where(Lesson.grade == grade, Lesson.volume == volume)
-        .order_by(Lesson.unit_number, Lesson.lesson_number, CharacterLesson.sort_order)
+        .order_by(Lesson.unit_number, Lesson.lesson_number, WordLesson.sort_order)
     )
+    if requirement:
+        stmt = stmt.where(WordLesson.requirement == requirement)
     if up_to_lesson is not None:
         stmt = stmt.where(
             (Lesson.unit_number * 100 + Lesson.lesson_number) <= up_to_lesson
         )
     result = await db.exec(stmt)
     seen = set()
-    characters = []
-    for c, cl, l in result.all():
-        key = c.character
-        characters.append({
-            **c.model_dump(),
-            "requirement": cl.requirement,
-            "requirement_label": REQUIREMENT_LABELS.get(cl.requirement, cl.requirement),
+    words = []
+    for w, wl, l in result.all():
+        key = w.word
+        words.append({
+            **w.model_dump(),
+            "requirement": wl.requirement,
+            "requirement_label": REQUIREMENT_LABELS.get(wl.requirement, wl.requirement),
             "lesson_title": l.title,
             "unit_title": l.unit_title,
             "unit_number": l.unit_number,
@@ -183,57 +137,19 @@ async def get_textbook_characters(
             "first_appearance": key not in seen,
         })
         seen.add(key)
-    return characters
-
-
-@router.get("/grades/{grade}/volumes/{volume}/phrases")
-async def get_textbook_phrases(
-    grade: int,
-    volume: int,
-    up_to_lesson: int | None = None,
-    db: AsyncSession = Depends(get_session),
-):
-    """Get all phrases in a textbook, optionally up to a lesson number."""
-    stmt = (
-        select(Phrase, PhraseLesson, Lesson)
-        .join(PhraseLesson, Phrase.phrase == PhraseLesson.phrase)
-        .join(Lesson, PhraseLesson.lesson_id == Lesson.id)
-        .where(Lesson.grade == grade, Lesson.volume == volume)
-        .order_by(Lesson.unit_number, Lesson.lesson_number, PhraseLesson.sort_order)
-    )
-    if up_to_lesson is not None:
-        stmt = stmt.where(
-            (Lesson.unit_number * 100 + Lesson.lesson_number) <= up_to_lesson
-        )
-    result = await db.exec(stmt)
-    return [
-        {**p.model_dump(), "lesson_title": l.title, "unit_title": l.unit_title}
-        for p, pl, l in result.all()
-    ]
+    return words
 
 
 # --- Deletes ---
 
-@router.delete("/characters/{char}", status_code=204)
-async def delete_character(char: str, db: AsyncSession = Depends(get_session)):
-    result = await db.exec(select(Character).where(Character.character == char))
-    character = result.one_or_none()
-    if not character:
-        raise HTTPException(status_code=404, detail="Character not found")
-    rows = await db.exec(select(CharacterLesson).where(CharacterLesson.character == char))
+@router.delete("/words/{word}", status_code=204)
+async def delete_word(word: str, db: AsyncSession = Depends(get_session)):
+    result = await db.exec(select(Word).where(Word.word == word))
+    w = result.one_or_none()
+    if not w:
+        raise HTTPException(status_code=404, detail="Word not found")
+    rows = await db.exec(select(WordLesson).where(WordLesson.word == word))
     for r in rows.all():
         await db.delete(r)
-    await db.delete(character)
-    await db.commit()
-
-@router.delete("/phrases/{phrase_text}", status_code=204)
-async def delete_phrase(phrase_text: str, db: AsyncSession = Depends(get_session)):
-    result = await db.exec(select(Phrase).where(Phrase.phrase == phrase_text))
-    phrase = result.one_or_none()
-    if not phrase:
-        raise HTTPException(status_code=404, detail="Phrase not found")
-    pls = await db.exec(select(PhraseLesson).where(PhraseLesson.phrase == phrase_text))
-    for r in pls.all():
-        await db.delete(r)
-    await db.delete(phrase)
+    await db.delete(w)
     await db.commit()

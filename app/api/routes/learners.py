@@ -51,7 +51,7 @@ async def create_test_session(data: TestSessionCreate, db: AsyncSession = Depend
         tr = TestResult(
             learner=data.learner,
             session_id=session.id,
-            character=entry.character,
+            word=entry.word,
             skill=entry.skill,
             passed=entry.passed,
             tested_at=now,
@@ -111,7 +111,7 @@ async def get_progress(learner: str, db: AsyncSession = Depends(get_session)):
 
     latest = {}  # (character, skill) → passed
     for r in all_results.all():
-        key = (r.character, r.skill)
+        key = (r.word, r.skill)
         if key not in latest:
             latest[key] = r.passed
 
@@ -151,10 +151,10 @@ async def get_character_progress(
 
     latest = {}
     for r in result.all():
-        key = (r.character, r.skill)
+        key = (r.word, r.skill)
         if key not in latest:
             latest[key] = {
-                "character": r.character,
+                "word": r.word,
                 "skill": r.skill,
                 "passed": r.passed,
                 "tested_at": r.tested_at.isoformat(),
@@ -169,17 +169,17 @@ async def get_character_progress(
     chars.sort(key=lambda c: (c["character"], c["skill"]))
     return chars
 
-@router.get("/learners/{learner}/characters/{char}/history")
+@router.get("/learners/{learner}/words/{word}/history")
 async def get_character_history(
     learner: str,
-    char: str,
+    word: str,
     db: AsyncSession = Depends(get_session),
 ):
     """All test attempts for a specific character by a learner."""
     result = await db.exec(
         select(TestResult)
         .where(TestResult.learner == learner)
-        .where(TestResult.character == char)
+        .where(TestResult.word == char)
         .order_by(TestResult.tested_at.desc())
     )
     return [
