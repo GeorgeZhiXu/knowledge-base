@@ -1,6 +1,7 @@
 """Routes for words (characters + phrases), lesson content, and cumulative queries."""
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, col
 
@@ -57,7 +58,9 @@ async def get_word(word: str, db: AsyncSession = Depends(get_session)):
     if len(word) == 1:
         phrase_result = await db.exec(
             select(Word).where(col(Word.word).contains(word))
-            .where(Word.word != word).order_by(Word.word).limit(50)
+            .where(Word.word != word)
+            .order_by(func.length(Word.word), func.coalesce(Word.standard_level, 999))
+            .limit(10)
         )
         phrases = [{"word": p.word, "pinyin": p.pinyin} for p in phrase_result.all()]
 
