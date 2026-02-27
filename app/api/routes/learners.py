@@ -1,17 +1,15 @@
-"""Learner activity tracking — test sessions, results, and progress."""
+"""Learner activity tracking — test results and progress."""
 
 from datetime import datetime
 from typing import Optional
 
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func
 from sqlmodel import select
 
 from app.core.database import get_session
-from app.models.models import TestSession, TestResult
+from app.models.models import TestResult
 
 router = APIRouter()
 
@@ -19,83 +17,36 @@ router = APIRouter()
 # --- Request schemas ---
 
 class TestResultEntry(BaseModel):
-    character: str
+    word: str
     skill: str  # "read" or "write"
     passed: bool
 
-class TestSessionCreate(BaseModel):
-    learner: str  # username
-    lesson_id: Optional[int] = None
-    title: Optional[str] = None
-    notes: Optional[str] = None
+class TestBatchCreate(BaseModel):
+    learner: str
+    session_title: Optional[str] = None
+    session_notes: Optional[str] = None
     results: list[TestResultEntry] = []
 
 
-# --- Test sessions ---
+# --- Submit test results ---
 
-@router.post("/test-sessions", status_code=201)
-async def create_test_session(data: TestSessionCreate, db: AsyncSession = Depends(get_session)):
-    """Create a test session with batch results."""
+@router.post("/test-results", status_code=201)
+async def submit_test_results(data: TestBatchCreate, db: AsyncSession = Depends(get_session)):
+    """Submit a batch of test results."""
     now = datetime.utcnow()
-    session = TestSession(
-        learner=data.learner,
-        lesson_id=data.lesson_id,
-        title=data.title,
-        notes=data.notes,
-        tested_at=now,
-    )
-    db.add(session)
-    await db.flush()
-
     for entry in data.results:
         tr = TestResult(
             learner=data.learner,
-            session_id=session.id,
             word=entry.word,
             skill=entry.skill,
             passed=entry.passed,
             tested_at=now,
+            session_title=data.session_title,
+            session_notes=data.session_notes,
         )
         db.add(tr)
-
     await db.commit()
-    await db.refresh(session)
-    return {
-        "session_id": str(session.id),
-        "learner": session.learner,
-        "title": session.title,
-        "tested_at": session.tested_at.isoformat(),
-        "results_count": len(data.results),
-    }
-
-@router.delete("/test-sessions/{session_id}", status_code=204)
-async def delete_test_session(session_id: int, db: AsyncSession = Depends(get_session)):
-    result = await db.exec(select(TestSession).where(TestSession.id == session_id))
-    session = result.one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    results = await db.exec(select(TestResult).where(TestResult.session_id == session_id))
-    for r in results.all():
-        await db.delete(r)
-    await db.delete(session)
-    await db.commit()
-
-@router.get("/learners/{learner}/sessions")
-async def list_sessions(learner: str, db: AsyncSession = Depends(get_session)):
-    result = await db.exec(
-        select(TestSession)
-        .where(TestSession.learner == learner)
-        .order_by(TestSession.tested_at.desc())
-    )
-    return [
-        {
-            "id": str(s.id),
-            "title": s.title,
-            "tested_at": s.tested_at.isoformat(),
-            "notes": s.notes,
-        }
-        for s in result.all()
-    ]
+    return {"status": "ok", "learner": data.learner, "count": len(data.results)}
 
 
 # --- Progress ---
@@ -109,37 +60,32 @@ async def get_progress(learner: str, db: AsyncSession = Depends(get_session)):
         .order_by(TestResult.tested_at.desc())
     )
 
-    latest = {}  # (character, skill) → passed
+    latest = {}  # (word, skill) → passed
     for r in all_results.all():
         key = (r.word, r.skill)
         if key not in latest:
             latest[key] = r.passed
 
-    read_mastered = sum(1 for (ch, sk), p in latest.items() if sk == "read" and p)
-    read_total = sum(1 for (ch, sk) in latest if sk == "read")
-    write_mastered = sum(1 for (ch, sk), p in latest.items() if sk == "write" and p)
-    write_total = sum(1 for (ch, sk) in latest if sk == "write")
-
-    session_result = await db.exec(
-        select(func.count(TestSession.id)).where(TestSession.learner == learner)
-    )
+    read_mastered = sum(1 for (w, sk), p in latest.items() if sk == "read" and p)
+    read_total = sum(1 for (w, sk) in latest if sk == "read")
+    write_mastered = sum(1 for (w, sk), p in latest.items() if sk == "write" and p)
+    write_total = sum(1 for (w, sk) in latest if sk == "write")
 
     return {
         "learner": learner,
-        "total_characters_tested": len(set(ch for ch, sk in latest)),
-        "total_sessions": session_result.one(),
+        "total_words_tested": len(set(w for w, sk in latest)),
         "read": {"mastered": read_mastered, "total": read_total},
         "write": {"mastered": write_mastered, "total": write_total},
     }
 
-@router.get("/learners/{learner}/progress/characters")
-async def get_character_progress(
+@router.get("/learners/{learner}/progress/words")
+async def get_word_progress(
     learner: str,
     skill: Optional[str] = None,
     status: Optional[str] = None,  # "passed" or "failed"
     db: AsyncSession = Depends(get_session),
 ):
-    """Per-character latest status for a learner."""
+    """Per-word latest status for a learner."""
     stmt = (
         select(TestResult)
         .where(TestResult.learner == learner)
@@ -160,26 +106,26 @@ async def get_character_progress(
                 "tested_at": r.tested_at.isoformat(),
             }
 
-    chars = list(latest.values())
+    words = list(latest.values())
     if status == "passed":
-        chars = [c for c in chars if c["passed"]]
+        words = [w for w in words if w["passed"]]
     elif status == "failed":
-        chars = [c for c in chars if not c["passed"]]
+        words = [w for w in words if not w["passed"]]
 
-    chars.sort(key=lambda c: (c["character"], c["skill"]))
-    return chars
+    words.sort(key=lambda w: (w["word"], w["skill"]))
+    return words
 
 @router.get("/learners/{learner}/words/{word}/history")
-async def get_character_history(
+async def get_word_history(
     learner: str,
     word: str,
     db: AsyncSession = Depends(get_session),
 ):
-    """All test attempts for a specific character by a learner."""
+    """All test attempts for a specific word by a learner."""
     result = await db.exec(
         select(TestResult)
         .where(TestResult.learner == learner)
-        .where(TestResult.word == char)
+        .where(TestResult.word == word)
         .order_by(TestResult.tested_at.desc())
     )
     return [
@@ -187,7 +133,7 @@ async def get_character_history(
             "skill": r.skill,
             "passed": r.passed,
             "tested_at": r.tested_at.isoformat(),
-            "session_id": str(r.session_id) if r.session_id else None,
+            "session_title": r.session_title,
         }
         for r in result.all()
     ]

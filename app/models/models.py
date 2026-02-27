@@ -44,22 +44,13 @@ class WordLesson(SQLModel, table=True):
 
 # --- Learner activity tracking ---
 
-class TestSession(SQLModel, table=True):
-    __tablename__ = "test_sessions"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    learner: str = Field(max_length=100, index=True)
-    lesson_id: Optional[int] = Field(default=None, foreign_key="lessons.id")
-    title: Optional[str] = Field(default=None, max_length=200)
-    tested_at: datetime = Field(default_factory=datetime.utcnow)
-    notes: Optional[str] = Field(default=None, max_length=500)
-
-
 class TestResult(SQLModel, table=True):
     __tablename__ = "test_results"
     id: Optional[int] = Field(default=None, primary_key=True)
     learner: str = Field(max_length=100, index=True)
-    session_id: Optional[int] = Field(default=None, foreign_key="test_sessions.id")
     word: str = Field(foreign_key="words.word", max_length=100, index=True)
     skill: str = Field(max_length=20)  # "read" or "write"
     passed: bool = Field(default=False)
     tested_at: datetime = Field(default_factory=datetime.utcnow)
+    session_title: Optional[str] = Field(default=None, max_length=200)
+    session_notes: Optional[str] = Field(default=None, max_length=500)

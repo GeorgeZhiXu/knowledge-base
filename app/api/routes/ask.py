@@ -31,11 +31,8 @@ words (word TEXT PK, pinyin TEXT, meaning TEXT, standard_level INT, cumulative_p
 word_lessons (word TEXT FK→words, lesson_id INT FK→lessons, requirement TEXT, sort_order INT)
   -- PK: (word, lesson_id, requirement). requirement: 'recognize' (认识) or 'write' (会写)
 
-test_sessions (id INTEGER PK AUTO, learner TEXT, lesson_id INT FK→lessons nullable, title TEXT, tested_at DATETIME, notes TEXT)
-  -- a quiz/practice session. learner is a username string (e.g. 'Ada')
-
-test_results (id INTEGER PK AUTO, learner TEXT, session_id INT FK→test_sessions nullable, word TEXT FK→words, skill TEXT, passed BOOL, tested_at DATETIME)
-  -- skill: 'read' or 'write'. passed: 1=mastered, 0=needs practice
+test_results (id INTEGER PK AUTO, learner TEXT, word TEXT FK→words, skill TEXT, passed BOOL, tested_at DATETIME, session_title TEXT, session_notes TEXT)
+  -- learner: username string (e.g. 'Ada'). skill: 'read' or 'write'. passed: 1=mastered, 0=needs practice
   -- To find a learner's failed words: WHERE learner = 'Ada' AND passed = 0
 
 Key relationships:
