@@ -65,11 +65,13 @@ async def get_word(word: str, db: AsyncSession = Depends(get_session)):
         )
         phrases = [{"word": p.word, "pinyin": p.pinyin} for p in phrase_result.all()]
 
-        # Similar characters: same non_radical, OR has this char as their non_radical
+        # Similar characters: same non_radical, OR has this char as their non_radical,
+        # OR is the non_radical component itself
         from sqlalchemy import or_
         conditions = []
         if w.non_radical:
             conditions.append(Word.non_radical == w.non_radical)
+            conditions.append(Word.word == w.non_radical)  # the component itself
         conditions.append(Word.non_radical == word)  # chars that contain this char
 
         if conditions:
