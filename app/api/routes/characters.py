@@ -53,8 +53,9 @@ async def get_word(word: str, db: AsyncSession = Depends(get_session)):
         for wl, l in wl_result.all()
     ]
 
-    # For single characters, find phrases containing it
+    # For single characters, find phrases and similar characters
     phrases = []
+    similar = []
     if len(word) == 1:
         phrase_result = await db.exec(
             select(Word).where(col(Word.word).contains(word))
@@ -64,7 +65,21 @@ async def get_word(word: str, db: AsyncSession = Depends(get_session)):
         )
         phrases = [{"word": p.word, "pinyin": p.pinyin} for p in phrase_result.all()]
 
-    return {**w.model_dump(), "lessons": lessons, "phrases": phrases}
+        # Similar characters (same non_radical component, top 95% cumulative)
+        if w.non_radical:
+            sim_result = await db.exec(
+                select(Word)
+                .where(Word.non_radical == w.non_radical)
+                .where(Word.word != word)
+                .where(func.length(Word.word) == 1)
+                .where(Word.cumulative_percent <= 95)
+                .order_by(Word.cumulative_percent.asc())
+                .limit(20)
+            )
+            similar = [{"word": s.word, "pinyin": s.pinyin, "radical": s.radical}
+                       for s in sim_result.all()]
+
+    return {**w.model_dump(), "lessons": lessons, "phrases": phrases, "similar": similar}
 
 
 # --- Lesson content ---
