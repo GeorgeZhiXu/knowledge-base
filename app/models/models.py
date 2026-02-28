@@ -37,6 +37,7 @@ class Word(SQLModel, table=True):
     etymology_type: Optional[str] = Field(default=None, max_length=20)  # pictographic/ideographic/pictophonetic
     phonetic: Optional[str] = Field(default=None, max_length=10)  # phonetic component, e.g. 可
     semantic: Optional[str] = Field(default=None, max_length=10)  # semantic component, e.g. 氵
+    non_radical: Optional[str] = Field(default=None, max_length=10)  # distinctive component (decomp minus radical)
 
 
 class WordLesson(SQLModel, table=True):

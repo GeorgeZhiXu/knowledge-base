@@ -32,8 +32,10 @@ words (word TEXT PK, pinyin TEXT, meaning TEXT, standard_level INT, cumulative_p
   -- etymology_type: 'pictographic' (象形), 'ideographic' (会意), 'pictophonetic' (形声)
   -- phonetic: the phonetic component for pictophonetic characters, e.g. '可' for 河
   -- semantic: the semantic component, e.g. '氵' for 河
+  -- non_radical: the distinctive component (decomposition minus radical), e.g. '寺' for 待(⿰彳寺)
   -- To find characters with same radical: WHERE radical = '氵' AND length(word) = 1
   -- To find characters with same phonetic: WHERE phonetic = '青' AND length(word) = 1
+  -- To find similar-looking characters (形近字): match on non_radical. e.g. for 待, find WHERE non_radical = '寺' → 持诗特等峙侍
 
 word_lessons (word TEXT FK→words, lesson_id INT FK→lessons, requirement TEXT, sort_order INT)
   -- PK: (word, lesson_id, requirement). requirement: 'recognize' (认识) or 'write' (会写)
