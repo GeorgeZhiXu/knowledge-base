@@ -35,7 +35,10 @@ words (word TEXT PK, pinyin TEXT, meaning TEXT, standard_level INT, cumulative_p
   -- non_radical: the distinctive component (decomposition minus radical), e.g. '寺' for 待(⿰彳寺)
   -- To find characters with same radical: WHERE radical = '氵' AND length(word) = 1
   -- To find characters with same phonetic: WHERE phonetic = '青' AND length(word) = 1
+  -- non_radical: the distinctive component (decomposition minus radical), e.g. '寺' for 待(⿰彳寺)
+  -- components: space-separated list of ALL sub-characters (recursive). e.g. 待 = '一 丨 十 土 寸 寺 彳'
   -- To find similar-looking characters (形近字): match on non_radical. e.g. for 待, find WHERE non_radical = '寺' → 持诗特等峙侍
+  -- To find characters containing a component: WHERE components LIKE '% 寺 %' OR components LIKE '寺 %' OR components LIKE '% 寺'
 
 word_lessons (word TEXT FK→words, lesson_id INT FK→lessons, requirement TEXT, sort_order INT)
   -- PK: (word, lesson_id, requirement). requirement: 'recognize' (认识) or 'write' (会写)

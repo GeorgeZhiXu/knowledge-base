@@ -38,6 +38,7 @@ class Word(SQLModel, table=True):
     phonetic: Optional[str] = Field(default=None, max_length=10)  # phonetic component, e.g. 可
     semantic: Optional[str] = Field(default=None, max_length=10)  # semantic component, e.g. 氵
     non_radical: Optional[str] = Field(default=None, max_length=10)  # distinctive component (decomp minus radical)
+    components: Optional[str] = Field(default=None)  # space-separated list of all sub-characters
 
 
 class WordLesson(SQLModel, table=True):
