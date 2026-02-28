@@ -32,6 +32,11 @@ class Word(SQLModel, table=True):
     meaning: Optional[str] = Field(default=None, max_length=500)
     standard_level: Optional[int] = Field(default=None)  # 《通用规范汉字表》: 1=常用, 2=次常用, 3=rare
     cumulative_percent: Optional[float] = Field(default=None)  # cumulative text coverage %
+    radical: Optional[str] = Field(default=None, max_length=10)  # 部首, e.g. 氵
+    decomposition: Optional[str] = Field(default=None, max_length=100)  # IDS, e.g. ⿰氵可
+    etymology_type: Optional[str] = Field(default=None, max_length=20)  # pictographic/ideographic/pictophonetic
+    phonetic: Optional[str] = Field(default=None, max_length=10)  # phonetic component, e.g. 可
+    semantic: Optional[str] = Field(default=None, max_length=10)  # semantic component, e.g. 氵
 
 
 class WordLesson(SQLModel, table=True):

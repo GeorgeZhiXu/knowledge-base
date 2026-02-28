@@ -20,13 +20,20 @@ lessons (id INTEGER PK AUTO, grade INT, volume INT, unit_number INT, unit_title 
   -- Filter by textbook: WHERE grade=4 AND volume=1
 
 
-words (word TEXT PK, pinyin TEXT, meaning TEXT, standard_level INT, cumulative_percent REAL)
+words (word TEXT PK, pinyin TEXT, meaning TEXT, standard_level INT, cumulative_percent REAL, radical TEXT, decomposition TEXT, etymology_type TEXT, phonetic TEXT, semantic TEXT)
   -- Unified table for both single characters (e.g. '人') and phrases (e.g. '人民')
   -- Single characters: length(word) = 1. Phrases: length(word) > 1.
   -- standard_level: 《通用规范汉字表》level — 1=常用(top 3500), 2=次常用(3501-6500), 3=rare(6501+)
   -- cumulative_percent: cumulative text coverage. LOWER = MORE common.
   --   IMPORTANT: many words have NULL cumulative_percent. Always filter with "cumulative_percent IS NOT NULL" when querying by frequency.
   --   "Top N most common" = ORDER BY cumulative_percent ASC LIMIT N
+  -- radical: the character's radical (部首), e.g. '氵' for 河. Only for single characters.
+  -- decomposition: IDS decomposition, e.g. '⿰氵可' for 河. ⿰=left-right, ⿱=top-bottom, ⿴=surround, etc.
+  -- etymology_type: 'pictographic' (象形), 'ideographic' (会意), 'pictophonetic' (形声)
+  -- phonetic: the phonetic component for pictophonetic characters, e.g. '可' for 河
+  -- semantic: the semantic component, e.g. '氵' for 河
+  -- To find characters with same radical: WHERE radical = '氵' AND length(word) = 1
+  -- To find characters with same phonetic: WHERE phonetic = '青' AND length(word) = 1
 
 word_lessons (word TEXT FK→words, lesson_id INT FK→lessons, requirement TEXT, sort_order INT)
   -- PK: (word, lesson_id, requirement). requirement: 'recognize' (认识) or 'write' (会写)
