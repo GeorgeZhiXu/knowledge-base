@@ -65,16 +65,16 @@ async def get_word(word: str, db: AsyncSession = Depends(get_session)):
         )
         phrases = [{"word": p.word, "pinyin": p.pinyin} for p in phrase_result.all()]
 
-        # Similar characters (same non_radical component, top 95% cumulative)
+        # Similar characters (same non_radical component, ordered by commonness)
         if w.non_radical:
             sim_result = await db.exec(
                 select(Word)
                 .where(Word.non_radical == w.non_radical)
                 .where(Word.word != word)
                 .where(func.length(Word.word) == 1)
-                .where(Word.cumulative_percent <= 95)
+                .where(Word.cumulative_percent.is_not(None))
                 .order_by(Word.cumulative_percent.asc())
-                .limit(20)
+                .limit(10)
             )
             similar = [{"word": s.word, "pinyin": s.pinyin, "radical": s.radical}
                        for s in sim_result.all()]
